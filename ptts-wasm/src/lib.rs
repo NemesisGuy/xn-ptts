@@ -730,6 +730,11 @@ impl Model {
         .map_err(js_err)
     }
 
+    /// The languages the model was trained for, as listed in its config.
+    pub fn languages(&self) -> std::result::Result<Vec<String>, JsError> {
+        self.with(|l| Ok(l.cfg.languages.clone())).map_err(js_err)
+    }
+
     /// `"cpu"` or `"webgpu"`: where this model runs.
     pub fn device(&self) -> std::result::Result<String, JsError> {
         self.with(|l| Ok(l.device.to_string())).map_err(js_err)

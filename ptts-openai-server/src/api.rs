@@ -210,6 +210,7 @@ fn next_seed(base: u64) -> u64 {
 pub async fn models(State(app): State<AppState>) -> Response {
     let model = serde_json::json!({
         "id": app.model_name, "object": "model", "created": 0, "owned_by": "gradium",
+        "languages": app.synth.languages(),
     });
     json(StatusCode::OK, serde_json::json!({ "object": "list", "data": [model] }))
 }

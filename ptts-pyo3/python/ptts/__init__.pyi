@@ -67,6 +67,10 @@ class TTS:
         """Names of the registered voices, sorted."""
 
     @property
+    def languages(self) -> list[str]:
+        """The languages the model was trained for, as listed in its config."""
+
+    @property
     def device(self) -> str:
         """Device the model is running on, e.g. `"cpu"`."""
 

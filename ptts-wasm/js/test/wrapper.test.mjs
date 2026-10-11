@@ -37,6 +37,7 @@ class FakeWorker {
           deviceReason: 'this browser offers no WebGPU adapter',
           threads: 4,
           threadsReason: 'default',
+          languages: ['en', 'fr'],
         },
       });
     }
@@ -84,6 +85,7 @@ test('device is checked before the worker starts, handed to it, and reported bac
   // What the worker says it got, not what was asked for.
   assert.equal(tts.device, 'cpu');
   assert.equal(tts.deviceReason, 'this browser offers no WebGPU adapter');
+  assert.deepEqual(tts.languages, ['en', 'fr']);
   tts.dispose();
   // Left out, it stays out, so the worker can tell the CPU default from a request for it.
   await PhononTTS.load({ lang: 'en', model: MODEL, workerUrl: 'worker.js' });

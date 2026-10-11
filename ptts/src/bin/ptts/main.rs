@@ -160,7 +160,7 @@ fn main() -> Result<()> {
     tracing::info!("loading model");
     let mut tts = builder.build()?;
     checkpoint.register_voices(&mut tts);
-    tracing::info!(device = %tts.device_name(), voices = ?tts.voices(), "model loaded");
+    tracing::info!(device = %tts.device_name(), voices = ?tts.voices(), languages = ?tts.languages(), "model loaded");
 
     let mut opts = SpeechOptions::default();
     match &voice {

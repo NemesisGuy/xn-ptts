@@ -75,6 +75,7 @@ models for the device, about 10 s on an iPhone 16 Pro; later loads take about 0.
 | `tts.stream(text)` | The same audio as an `AsyncThrowingStream<[Float], Error>`. |
 | `tts.synthesize(text)` | All the samples at once. |
 | `tts.voices`, `tts.setVoice(_:)` | The voices in the model folder, and switching between them (about 0.6 s). |
+| `tts.languages` | The languages the model was trained for, as its config lists them. |
 | `PhononPlayer` | Plays chunks as they arrive. `enqueue(_:)` and `stop()` work from any thread. |
 
 Audio is mono Float32 at 24 kHz. Every method can be called from any thread or task, and an

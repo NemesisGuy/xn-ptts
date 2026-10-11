@@ -17,6 +17,7 @@ pub struct Engine {
     normalize: Normalize,
     dir: PathBuf,
     voices: Vec<String>,
+    languages: Vec<String>,
 }
 
 fn voice_names(dir: &Path) -> Vec<String> {
@@ -71,6 +72,10 @@ impl Engine {
             flow_unit,
         };
         let voices = voice_names(dir);
+        let languages = meta["languages"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect())
+            .unwrap_or_default();
         let voice = load_voice(dir, voices.first().ok_or("no voices in the bundle")?)?;
         let tokenizer =
             ptts::tok::Tok::open(&dir.join("tokenizer.json")).map_err(|e| e.to_string())?;
@@ -81,11 +86,16 @@ impl Engine {
             normalize,
             dir: dir.to_path_buf(),
             voices,
+            languages,
         })
     }
 
     pub fn voices(&self) -> &[String] {
         &self.voices
+    }
+
+    pub fn languages(&self) -> &[String] {
+        &self.languages
     }
 
     /// Switch to one of [`Self::voices`].

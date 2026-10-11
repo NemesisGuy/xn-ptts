@@ -39,17 +39,22 @@ class PhononTTS(modelDir: String, lang: String) : AutoCloseable {
 
     /** The voices this checkpoint ships, sorted. */
     val voices: List<String>
-        get() {
-            val names = mutableListOf<String>()
-            val block = lib.ptts_voices(open())
-            var offset = 0L
-            while (true) {
-                val name = block.getString(offset, "UTF-8")
-                if (name.isEmpty()) return names
-                names += name
-                offset += name.toByteArray(Charsets.UTF_8).size + 1
-            }
+        get() = names(lib.ptts_voices(open()))
+
+    /** The languages the model was trained for, as its config lists them. */
+    val languages: List<String>
+        get() = names(lib.ptts_languages(open()))
+
+    private fun names(block: Pointer): List<String> {
+        val names = mutableListOf<String>()
+        var offset = 0L
+        while (true) {
+            val name = block.getString(offset, "UTF-8")
+            if (name.isEmpty()) return names
+            names += name
+            offset += name.toByteArray(Charsets.UTF_8).size + 1
         }
+    }
 
     /** Speak in [name], one of [voices], from now on. */
     fun setVoice(name: String) = check(lib.ptts_set_voice(open(), name))
@@ -100,6 +105,7 @@ class PhononTTS(modelDir: String, lang: String) : AutoCloseable {
         fun ptts_speak(h: Pointer, text: String, cb: FrameFn, user: Pointer?, out: Result): Byte
         fun ptts_voices(h: Pointer): Pointer
         fun ptts_set_voice(h: Pointer, name: String): Byte
+        fun ptts_languages(h: Pointer): Pointer
         fun ptts_last_error(h: Pointer?): String?
         fun ptts_free(h: Pointer)
 

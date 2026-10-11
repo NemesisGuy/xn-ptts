@@ -36,6 +36,8 @@ bool ptts_speak(PttsHandle *h, const char *text, PttsFrameFn cb, void *user, Ptt
 /// NUL-separated voice names, ending in a second NUL. Borrowed.
 const char *ptts_voices(const PttsHandle *h);
 bool ptts_set_voice(PttsHandle *h, const char *name);
+/// The languages the model was trained for, NUL-separated like ptts_voices. Borrowed.
+const char *ptts_languages(const PttsHandle *h);
 /// The last error on `h`, or the last ptts_new failure on this thread when `h` is NULL.
 const char *ptts_last_error(const PttsHandle *h);
 void ptts_free(PttsHandle *h);

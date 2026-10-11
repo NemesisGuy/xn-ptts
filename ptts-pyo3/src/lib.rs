@@ -355,6 +355,12 @@ impl Tts {
         Ok(self.lock()?.voices())
     }
 
+    /// The languages the model was trained for, as listed in its config.
+    #[getter]
+    fn languages(&self) -> PyResult<Vec<String>> {
+        Ok(self.lock()?.languages().to_vec())
+    }
+
     /// Device the model is running on, e.g. `"cpu"`.
     #[getter]
     fn device(&self) -> PyResult<String> {
