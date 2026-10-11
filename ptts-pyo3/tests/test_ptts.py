@@ -214,6 +214,31 @@ def test_nothing_is_downloaded_before_the_arguments_are_checked():
     assert time.monotonic() - start < 30.0
 
 
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")
+def test_a_process_forked_after_loading_raises_instead_of_hanging():
+    import warnings
+
+    missing = "/definitely/not/a/checkpoint/config.json"
+    with pytest.raises(LookupError):
+        ptts.TTS(config=missing, lang="en")
+    read, write = os.pipe()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        pid = os.fork()
+    if pid == 0:
+        try:
+            ptts.TTS(config=missing, lang="en")
+            message = "no error"
+        except BaseException as e:
+            message = f"{type(e).__name__}: {e}"
+        os.write(write, message.encode())
+        os._exit(0)
+    os.close(write)
+    os.waitpid(pid, 0)
+    message = os.read(read, 4096).decode()
+    assert message.startswith("RuntimeError") and "fork" in message, message
+
+
 # --- needs a checkpoint ----------------------------------------------------------------------
 
 

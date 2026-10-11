@@ -62,6 +62,21 @@ impl<R, E: Into<ptts::Error>> IntoPy<R> for Result<R, E> {
     }
 }
 
+/// The process that first loaded a model. The CPU thread pools are built once per process and
+/// their threads do not survive `fork()`, so a forked child that runs a model waits forever.
+static FIRST_PID: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+fn check_not_forked() -> PyResult<()> {
+    if *FIRST_PID.get_or_init(std::process::id) == std::process::id() {
+        return Ok(());
+    }
+    Err(pyo3::exceptions::PyRuntimeError::new_err(
+        "this process was forked after ptts loaded a model, and ptts's worker threads do not \
+         survive a fork. Load models only after forking (for gunicorn, without --preload), or \
+         use the \"spawn\" multiprocessing start method",
+    ))
+}
+
 /// Resolve an explicitly supplied local directory/config or Hub repo ID.
 fn resolve(config: Option<&str>, revision: Option<&str>, quant: Quant) -> ptts::Result<Checkpoint> {
     match config {
@@ -283,6 +298,7 @@ impl Tts {
         conditions: Option<HashMap<String, Bound<'_, PyAny>>>,
         revision: Option<String>,
     ) -> PyResult<Self> {
+        check_not_forked()?;
         let conditions = conditions
             .unwrap_or_default()
             .into_iter()
@@ -441,6 +457,7 @@ impl Tts {
 
     /// Register a voice from a precomputed embedding file.
     fn add_voice(&self, py: Python<'_>, name: &str, path: std::path::PathBuf) -> PyResult<()> {
+        check_not_forked()?;
         let inner = Arc::clone(&self.inner);
         py.detach(move || inner.lock().map_err(|_| poisoned())?.add_voice_file(name, &path).py())
     }
@@ -452,6 +469,7 @@ impl Tts {
         py: Python<'_>,
         conditions: HashMap<String, Bound<'_, PyAny>>,
     ) -> PyResult<()> {
+        check_not_forked()?;
         let conditions = conditions
             .into_iter()
             .map(|(name, value)| Ok((name, value.str()?.to_string())))
@@ -472,6 +490,7 @@ impl Tts {
         embedding: PyReadonlyArrayDyn<'_, f32>,
         null_embedding: Option<PyReadonlyArrayDyn<'_, f32>>,
     ) -> PyResult<()> {
+        check_not_forked()?;
         let (emb, frames, dim) = embedding_dims(&embedding)?;
         let null = match null_embedding.as_ref() {
             None => None,
@@ -488,6 +507,7 @@ impl Tts {
         name: &str,
         pcm: numpy::PyReadonlyArray1<'_, f32>,
     ) -> PyResult<()> {
+        check_not_forked()?;
         let pcm = pcm.as_slice()?.to_vec();
         let inner = Arc::clone(&self.inner);
         py.detach(move || inner.lock().map_err(|_| poisoned())?.add_voice_from_pcm(name, &pcm).py())
@@ -532,6 +552,7 @@ impl Tts {
     /// across a GIL reacquisition — which `drain` does per chunk — deadlocks
     /// against any other Python thread calling in.
     fn start(&self, py: Python<'_>, text: &str, opts: &SpeechOptions) -> PyResult<SpeechStream> {
+        check_not_forked()?;
         let inner = Arc::clone(&self.inner);
         let opts = opts.clone();
         py.detach(move || {

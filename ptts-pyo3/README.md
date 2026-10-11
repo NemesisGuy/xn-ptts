@@ -51,6 +51,8 @@ with tts.stream("A longer sentence.", voice=voice) as audio:
 
 `tts.sample_rate` is the PCM sample rate; `save` writes a mono 16-bit WAV and returns its duration. Leaving the `with` block stops a stream early and waits for its workers to finish. Streaming keeps bounded audio and latent buffers: leaving a stream unread pauses generation once they fill, and consuming chunks lets it resume.
 
+Load models after forking, not before. ptts's worker threads do not survive a `fork()`, so a process forked after a model was loaded raises `RuntimeError` when it uses ptts. With `multiprocessing`, use the `spawn` start method. With gunicorn, do not use `--preload`.
+
 `tts.voices` lists the voices that were found. When no voice is given, the checkpoint's configured default is used, then `default` if present, then the first by name. Pass `voice="name"` to any speech method to select one.
 
 ## Command line
