@@ -108,7 +108,7 @@ impl Engine {
             .map_err(|e| e.to_string())?;
         let mut chunks = Vec::new();
         for chunk in planned.into_iter().filter(|c| !c.tokens.is_empty()) {
-            // Only a single word that is too long is left uncut.
+            // Only a single character that is too long is left uncut.
             if chunk.tokens.len() > max {
                 return Err(format!(
                     "one word is {} tokens, over the {max} the model takes",

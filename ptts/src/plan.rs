@@ -161,8 +161,9 @@ pub fn chunks(
 /// comma keeps it, so [`prepare_text_prompt`] does not end it with a full stop, and the model does
 /// not read it as a finished sentence. A sentence with no such mark is cut at the word nearest its
 /// middle, and that piece does get the full stop. Every piece starts with a capital letter, but
-/// otherwise holds the same words the sentence did. A single word longer than `max` cannot be
-/// cut and is left as it is, for the caller to refuse.
+/// otherwise holds the same words the sentence did. A single word longer than `max`, such as a
+/// long run of digits, is cut between its characters. Only a single character longer than `max`
+/// is left as it is, for the caller to refuse.
 pub fn fit(
     chunks: Vec<Chunk>,
     max: usize,
@@ -172,14 +173,26 @@ pub fn fit(
     let mut fitted = Vec::with_capacity(chunks.len());
     let mut todo: Vec<Chunk> = chunks.into_iter().rev().collect();
     while let Some(chunk) = todo.pop() {
-        let words: Vec<&str> = chunk.text.split_whitespace().collect();
-        if chunk.tokens.len() <= max || words.len() < 2 {
+        if chunk.tokens.len() <= max {
             fitted.push(chunk);
             continue;
         }
-        let (a, b) = words.split_at(cut(&words, max.div_ceil(4), tokenizer)?);
-        for half in [b, a] {
-            todo.push(Chunk::new(half.join(" "), tokenizer, frame_rate)?);
+        let words: Vec<&str> = chunk.text.split_whitespace().collect();
+        let halves = if words.len() >= 2 {
+            let (a, b) = words.split_at(cut(&words, max.div_ceil(4), tokenizer)?);
+            [a.join(" "), b.join(" ")]
+        } else {
+            let word = chunk.text.trim();
+            match word.char_indices().nth(word.chars().count() / 2) {
+                Some((mid, _)) if mid > 0 => [word[..mid].to_string(), word[mid..].to_string()],
+                _ => {
+                    fitted.push(chunk);
+                    continue;
+                }
+            }
+        };
+        for half in halves.into_iter().rev() {
+            todo.push(Chunk::new(half, tokenizer, frame_rate)?);
         }
     }
     Ok(fitted)
@@ -187,7 +200,7 @@ pub fn fit(
 
 /// Cut chunks to `max` tokens and reject a piece that cannot be split further.
 ///
-/// Call this before sizing a KV cache from the chunks. [`fit`] leaves a single oversized word
+/// Call this before sizing a KV cache from the chunks. [`fit`] leaves a single oversized character
 /// untouched so callers with their own fixed prompt limit can report an appropriate error.
 pub fn fit_or_error(
     chunks: Vec<Chunk>,
@@ -397,12 +410,47 @@ mod tests {
     }
 
     #[test]
-    fn fit_leaves_chunks_that_fit_and_single_words_alone() {
+    fn fit_leaves_chunks_that_fit_alone() {
         let tok = Words::default();
         let planned = chunks(&tok, "one two. three four.", Normalize::OFF, 3, 12.5).unwrap();
         let texts_before: Vec<String> = planned.iter().map(|c| c.text.clone()).collect();
         assert_eq!(texts(&fit(planned, 3, &tok, 12.5).unwrap()), texts_before);
-        assert_eq!(texts(&fit_text("one", 0)), ["one"]);
+    }
+
+    /// One token per character, so a single word can be longer than the limit.
+    struct Chars;
+
+    impl Tokenizer for Chars {
+        fn encode(&self, text: &str) -> xn::Result<Vec<u32>> {
+            Ok(text.chars().map(|c| c as u32).collect())
+        }
+
+        fn decode(&self, tokens: &[u32]) -> xn::Result<String> {
+            Ok(tokens.iter().filter_map(|&t| char::from_u32(t)).collect())
+        }
+    }
+
+    #[test]
+    fn fit_cuts_a_word_that_is_too_long_on_its_own() {
+        let word = "abcdefghijkl";
+        let chunk = Chunk::new(word.to_string(), &Chars, 12.5).unwrap();
+        let fitted = fit(vec![chunk], 5, &Chars, 12.5).unwrap();
+        assert_eq!(texts(&fitted), ["abc", "def", "ghi", "jkl"]);
+        assert!(fitted.iter().all(|c| c.tokens.len() <= 5));
+
+        let chunk = Chunk::new("é".repeat(9), &Chars, 12.5).unwrap();
+        let fitted = fit(vec![chunk], 4, &Chars, 12.5).unwrap();
+        assert_eq!(fitted.iter().map(|c| c.text.as_str()).collect::<String>(), "é".repeat(9));
+    }
+
+    #[test]
+    fn fit_or_error_accepts_a_long_word_between_sentences() {
+        let text = format!("Your number is {}. Thank you.", "9".repeat(40));
+        let planned = chunks(&Chars, &text, Normalize::OFF, 50, 12.5).unwrap();
+        let fitted = fit_or_error(planned, 20, &Chars, 12.5).unwrap();
+        assert!(fitted.iter().all(|c| c.tokens.len() <= 20));
+        let spoken: String = fitted.iter().map(|c| c.text.replace(' ', "")).collect();
+        assert_eq!(spoken, text.replace(' ', ""));
     }
 
     #[test]
