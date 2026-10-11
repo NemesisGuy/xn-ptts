@@ -330,6 +330,12 @@ struct SynthOf<Q: BackendQ> {
     primed: Mutex<HashMap<(String, bool), Primed<Q>>>,
     conditioners: Conditioners<Q::T, Q::B>,
     conditions: Option<Tensor<Q::T, Q::B>>,
+    /// Whether a session should decode each frame on the flow-LM's own thread rather than
+    /// handing it to a second thread. Devices with one shared command queue (CUDA, Metal) have
+    /// no second execution unit for a second thread to overlap onto, so the split only adds
+    /// cross-thread contention over that queue; the CPU's separate cores make it a real win
+    /// there. Set once per backend in [`SynthBuilder::build_cuda`] and friends.
+    inline_decode: bool,
 }
 
 /// How many primed prefixes to keep. A process that clones voices under fresh names -- which
@@ -361,6 +367,7 @@ impl<Q: BackendQ> SynthOf<Q> {
             seq_budget,
             normalize: self.normalize,
             post_process: settings.post_process.clone(),
+            inline_decode: self.inline_decode,
         })
     }
 
@@ -810,6 +817,8 @@ struct SessionOf<Q: BackendQ> {
     post_process: Vec<ModuleConfig>,
     /// Set while a generation is running. See the note on this type.
     in_flight: Arc<std::sync::atomic::AtomicBool>,
+    /// See [`SynthOf::inline_decode`].
+    inline_decode: bool,
 }
 
 impl<Q: BackendQ> SessionOf<Q> {
@@ -884,108 +893,127 @@ impl<Q: BackendQ> SessionOf<Q> {
         let mut post = Chain::from_modules(self.sample_rate(), &self.post_process);
 
         let (pcm_tx, pcm_rx) = std::sync::mpsc::sync_channel::<Result<Vec<f32>>>(PCM_QUEUE);
-        let (latent_tx, latent_rx) = std::sync::mpsc::sync_channel::<Frame<Q>>(LATENT_QUEUE);
-        // The decoder says when the first frame's audio is out, and the flow-LM waits for it
-        // before its second step. Run side by side, the two compete for the device and the
-        // first decode, which is all the time to first audio waits on, comes out slower; held
-        // back, the flow-LM loses one decode's time, far ahead of real time.
-        let (first_tx, first_rx) = std::sync::mpsc::channel::<()>();
 
-        // Decoder: latents in, PCM out. Reset between chunks so each chunk
-        // starts from a clean codec state, matching the pre-refactor behavior.
-        let decode_model = Arc::clone(&self.model);
-        let decode_tx = pcm_tx.clone();
-        let decode_handle = std::thread::spawn(move || {
-            let mut first_tx = Some(first_tx);
-            let mut state = mimi_init.clone();
-            // The post-processing chain delays its output: its first `skip` samples are the
-            // zeros it was primed with, dropped here, and the stream's last are flushed below.
-            let mut skip = post.latency();
-            while let Ok(frame) = latent_rx.recv() {
-                let first = match frame {
-                    Frame::ChunkEnd => {
-                        state = mimi_init.clone();
-                        continue;
-                    }
-                    Frame::Latent(latent) => latent,
-                };
-                // Decode every latent the flow-LM has already queued in one
-                // call: the decoder is exact for any number of frames, and one
-                // call over several is much cheaper than one call per frame.
-                // Only what is already waiting is taken, so no frame is ever
-                // held back for a batch to fill — the first one included.
-                let mut reset_after = false;
-                let mut batch = vec![first];
-                while batch.len() < DECODE_BATCH {
-                    let Ok(frame) = latent_rx.try_recv() else { break };
-                    match frame {
-                        // Past a chunk boundary the codec state resets, so the
-                        // batch has to stop here and resume on the next frame.
+        let workers = if self.inline_decode {
+            // One shared command queue (CUDA, Metal): a second thread has no second execution
+            // unit to overlap onto, and only adds cross-thread contention for that queue. Decode
+            // each frame inline, on the flow-LM's own thread, instead -- see `inline_decode`.
+            let model = Arc::clone(&self.model);
+            let handle = std::thread::spawn(move || {
+                let _in_flight = in_flight;
+                let result =
+                    run_inline(&model, chunks, base_state, cfg_base, rng, mimi_init, &pcm_tx, post);
+                if let Err(e) = result {
+                    let _ = pcm_tx.send(Err(e));
+                }
+            });
+            vec![handle]
+        } else {
+            let (latent_tx, latent_rx) = std::sync::mpsc::sync_channel::<Frame<Q>>(LATENT_QUEUE);
+            // The decoder says when the first frame's audio is out, and the flow-LM waits for it
+            // before its second step. Run side by side, the two compete for the device and the
+            // first decode, which is all the time to first audio waits on, comes out slower; held
+            // back, the flow-LM loses one decode's time, far ahead of real time.
+            let (first_tx, first_rx) = std::sync::mpsc::channel::<()>();
+
+            // Decoder: latents in, PCM out. Reset between chunks so each chunk
+            // starts from a clean codec state, matching the pre-refactor behavior.
+            let decode_model = Arc::clone(&self.model);
+            let decode_tx = pcm_tx.clone();
+            let decode_handle = std::thread::spawn(move || {
+                let mut first_tx = Some(first_tx);
+                let mut state = mimi_init.clone();
+                // The post-processing chain delays its output: its first `skip` samples are the
+                // zeros it was primed with, dropped here, and the stream's last are flushed below.
+                let mut skip = post.latency();
+                while let Ok(frame) = latent_rx.recv() {
+                    let first = match frame {
                         Frame::ChunkEnd => {
-                            reset_after = true;
-                            break;
+                            state = mimi_init.clone();
+                            continue;
                         }
-                        Frame::Latent(latent) => batch.push(latent),
+                        Frame::Latent(latent) => latent,
+                    };
+                    // Decode every latent the flow-LM has already queued in one
+                    // call: the decoder is exact for any number of frames, and one
+                    // call over several is much cheaper than one call per frame.
+                    // Only what is already waiting is taken, so no frame is ever
+                    // held back for a batch to fill — the first one included.
+                    let mut reset_after = false;
+                    let mut batch = vec![first];
+                    while batch.len() < DECODE_BATCH {
+                        let Ok(frame) = latent_rx.try_recv() else { break };
+                        match frame {
+                            // Past a chunk boundary the codec state resets, so the
+                            // batch has to stop here and resume on the next frame.
+                            Frame::ChunkEnd => {
+                                reset_after = true;
+                                break;
+                            }
+                            Frame::Latent(latent) => batch.push(latent),
+                        }
+                    }
+                    let latent = match batch.len() {
+                        1 => batch.pop().expect("just checked"),
+                        _ => match Tensor::cat(&batch.iter().collect::<Vec<_>>(), 1) {
+                            Ok(latent) => latent,
+                            Err(e) => {
+                                let _ = decode_tx.send(Err(e.into()));
+                                return;
+                            }
+                        },
+                    };
+                    let pcm = decode_model
+                        .decode_latent(&latent, &mut state)
+                        .and_then(|audio| audio.narrow(0, ..1)?.contiguous()?.to_vec())
+                        .map(|mut pcm| {
+                            post.process(&mut pcm);
+                            let n = skip.min(pcm.len());
+                            skip -= n;
+                            pcm.drain(..n);
+                            pcm
+                        })
+                        .map_err(Error::from);
+                    let failed = pcm.is_err();
+                    if decode_tx.send(pcm).is_err() || failed {
+                        return;
+                    }
+                    if let Some(first_tx) = first_tx.take() {
+                        let _ = first_tx.send(());
+                    }
+                    if reset_after {
+                        state = mimi_init.clone();
                     }
                 }
-                let latent = match batch.len() {
-                    1 => batch.pop().expect("just checked"),
-                    _ => match Tensor::cat(&batch.iter().collect::<Vec<_>>(), 1) {
-                        Ok(latent) => latent,
-                        Err(e) => {
-                            let _ = decode_tx.send(Err(e.into()));
-                            return;
-                        }
-                    },
-                };
-                let pcm = decode_model
-                    .decode_latent(&latent, &mut state)
-                    .and_then(|audio| audio.narrow(0, ..1)?.contiguous()?.to_vec())
-                    .map(|mut pcm| {
-                        post.process(&mut pcm);
-                        let n = skip.min(pcm.len());
-                        skip -= n;
-                        pcm.drain(..n);
-                        pcm
-                    })
-                    .map_err(Error::from);
-                let failed = pcm.is_err();
-                if decode_tx.send(pcm).is_err() || failed {
-                    return;
+                let latency = post.latency();
+                if latency > skip {
+                    let mut tail = vec![0.0; latency];
+                    post.process(&mut tail);
+                    tail.drain(..skip);
+                    let _ = decode_tx.send(Ok(tail));
                 }
-                if let Some(first_tx) = first_tx.take() {
-                    let _ = first_tx.send(());
-                }
-                if reset_after {
-                    state = mimi_init.clone();
-                }
-            }
-            let latency = post.latency();
-            if latency > skip {
-                let mut tail = vec![0.0; latency];
-                post.process(&mut tail);
-                tail.drain(..skip);
-                let _ = decode_tx.send(Ok(tail));
-            }
-        });
+            });
 
-        // Flow-LM: text in, latents out.
-        let model = Arc::clone(&self.model);
-        let backbone_handle = std::thread::spawn(move || {
-            // Dropped when this thread ends, which is after its last write.
-            let _in_flight = in_flight;
-            let result =
-                run_backbone(&model, chunks, base_state, cfg_base, rng, &latent_tx, first_rx);
-            if let Err(e) = result {
-                let _ = pcm_tx.send(Err(e));
-            }
-        });
+            // Flow-LM: text in, latents out.
+            let model = Arc::clone(&self.model);
+            let backbone_handle = std::thread::spawn(move || {
+                // Dropped when this thread ends, which is after its last write.
+                let _in_flight = in_flight;
+                let result =
+                    run_backbone(&model, chunks, base_state, cfg_base, rng, &latent_tx, first_rx);
+                if let Err(e) = result {
+                    let _ = pcm_tx.send(Err(e));
+                }
+            });
+
+            vec![backbone_handle, decode_handle]
+        };
 
         Ok(SpeechStream {
             rx: Some(pcm_rx),
             sample_rate: self.sample_rate(),
             failed: false,
-            workers: Some([backbone_handle, decode_handle]),
+            workers: Some(workers),
         })
     }
 }
@@ -1146,6 +1174,81 @@ fn run_backbone<Q: BackendQ>(
     Ok(())
 }
 
+/// Like [`run_backbone`], but decodes each frame immediately on the same thread instead of
+/// handing it to a second one over a channel -- see [`SynthOf::inline_decode`]. With nothing
+/// running concurrently there is no second thread to rendezvous with before the second step,
+/// unlike `run_backbone`.
+#[allow(clippy::too_many_arguments)]
+fn run_inline<Q: BackendQ>(
+    model: &TTSModel<Q>,
+    chunks: Vec<Chunk>,
+    base_state: TTSState<Q>,
+    cfg_base: Option<(f32, TTSState<Q>)>,
+    mut rng: Box<dyn crate::flow_lm::Rng + Send>,
+    mimi_init: crate::mimi::MimiDecoderState<f32, Q::B>,
+    pcm_tx: &std::sync::mpsc::SyncSender<Result<Vec<f32>>>,
+    mut post: Chain,
+) -> Result<()> {
+    let mut mimi_state = mimi_init.clone();
+    // The post-processing chain delays its output: its first `skip` samples are the zeros it
+    // was primed with, dropped here, and the stream's last are flushed below.
+    let mut skip = post.latency();
+    for chunk in chunks.iter() {
+        let mut state = base_state.clone();
+        let mut cfg_state = cfg_base.clone();
+        model.prompt_text(&mut state, &chunk.tokens)?;
+        if let Some((_, null_state)) = cfg_state.as_mut() {
+            model.prompt_text_null(null_state)?;
+        }
+
+        let mut prev: Option<Tensor<Q::T, Q::B>> = None;
+        let mut eos = EosPolicy::new(chunk.frames_after_eos);
+
+        for _ in 0..chunk.frame_budget {
+            let input = match &prev {
+                None => StepInput::Bos { batch: 1 },
+                Some(t) => StepInput::Latent(t),
+            };
+            let (next, is_eos) = match cfg_state.as_mut() {
+                Some((coef, null_state)) => {
+                    model.generate_step_cfg(&mut state, null_state, *coef, input, &mut rng)?
+                }
+                None => model.generate_step(&mut state, input, &mut rng)?,
+            };
+            let pcm = model
+                .decode_latent(&next, &mut mimi_state)
+                .and_then(|audio| audio.narrow(0, ..1)?.contiguous()?.to_vec())
+                .map(|mut pcm| {
+                    post.process(&mut pcm);
+                    let n = skip.min(pcm.len());
+                    skip -= n;
+                    pcm.drain(..n);
+                    pcm
+                })
+                .map_err(Error::from);
+            let failed = pcm.is_err();
+            // A closed channel means the consumer went away; stop quietly and let the caller
+            // report any error of its own.
+            if pcm_tx.send(pcm).is_err() || failed {
+                return Ok(());
+            }
+            if eos.should_stop(is_eos) {
+                break;
+            }
+            prev = Some(next);
+        }
+        mimi_state = mimi_init.clone();
+    }
+    let latency = post.latency();
+    if latency > skip {
+        let mut tail = vec![0.0; latency];
+        post.process(&mut tail);
+        tail.drain(..skip);
+        let _ = pcm_tx.send(Ok(tail));
+    }
+    Ok(())
+}
+
 /// PCM chunks from a running generation.
 ///
 /// Each item is mono `f32` samples at [`Self::sample_rate`] — one Mimi frame's
@@ -1164,9 +1267,11 @@ pub struct SpeechStream {
     rx: Option<std::sync::mpsc::Receiver<Result<Vec<f32>>>>,
     sample_rate: u32,
     failed: bool,
-    /// The flow-LM and decoder threads, joined once the channel closes so that
-    /// a panic in either surfaces as an error rather than as truncated audio.
-    workers: Option<[std::thread::JoinHandle<()>; 2]>,
+    /// The generation thread(s), joined once the channel closes so that a panic in any of them
+    /// surfaces as an error rather than as truncated audio. Two threads (flow LM and Mimi
+    /// decoder) on the CPU, one thread doing both inline on devices with a single shared
+    /// command queue; see [`SynthOf::inline_decode`].
+    workers: Option<Vec<std::thread::JoinHandle<()>>>,
 }
 
 impl SpeechStream {
@@ -1410,7 +1515,7 @@ impl SynthBuilder {
     fn build_cpu(self) -> Result<Synth> {
         macro_rules! cpu {
             ($q:ty) => {
-                Ok(Synth(Box::new(self.load::<$q>(xn::CPU)?)))
+                Ok(Synth(Box::new(self.load::<$q>(xn::CPU, false)?)))
             };
         }
         match self.quant {
@@ -1435,7 +1540,11 @@ impl SynthBuilder {
         let dev = xn::cuda_backend::Device::new(0)?;
         // Event tracking costs a few percent and this workload never queries events.
         unsafe { dev.disable_event_tracking() };
-        let synth = self.load::<xn::Unquantized<half::bf16, _>>(dev)?;
+        // The flow LM and the Mimi decoder share one CUDA stream and cuBLAS handle, so running
+        // them on separate threads does not overlap GPU work the way it does on the CPU's
+        // separate cores -- it only adds cross-thread contention for that shared stream. Decode
+        // inline on the flow LM's thread instead; see `inline_decode`.
+        let synth = self.load::<xn::Unquantized<half::bf16, _>>(dev, true)?;
         Ok(Synth(Box::new(synth)))
     }
 
@@ -1444,7 +1553,7 @@ impl SynthBuilder {
         // `quant()` reports `self.quant`, which `check_device` keeps at F32 here.
         debug_assert_eq!(self.quant, Quant::F32);
         let dev = xn::vulkan_backend::Device::new(0)?;
-        let synth = self.load::<xn::Unquantized<f32, _>>(dev)?;
+        let synth = self.load::<xn::Unquantized<f32, _>>(dev, false)?;
         Ok(Synth(Box::new(synth)))
     }
 
@@ -1453,7 +1562,8 @@ impl SynthBuilder {
         // `quant()` reports `self.quant`, which `check_device` keeps at F32 here.
         debug_assert_eq!(self.quant, Quant::F32);
         let dev = xn::metal_backend::Device::new(0)?;
-        let synth = self.load::<xn::Unquantized<half::bf16, _>>(dev)?;
+        // Same reasoning as CUDA above: one shared command queue, so decode inline.
+        let synth = self.load::<xn::Unquantized<half::bf16, _>>(dev, true)?;
         Ok(Synth(Box::new(synth)))
     }
 
@@ -1476,8 +1586,9 @@ impl SynthBuilder {
         Err(Error::unsupported("this build has no Metal support; rebuild with the `metal` feature"))
     }
 
-    /// Load the weights and register the voices.
-    fn load<Q: BackendQ>(mut self, device: Q::B) -> Result<SynthOf<Q>> {
+    /// Load the weights and register the voices. `inline_decode` is forwarded to
+    /// [`SynthOf`]; see its field doc.
+    fn load<Q: BackendQ>(mut self, device: Q::B, inline_decode: bool) -> Result<SynthOf<Q>> {
         if !self.weights.is_file() {
             return Err(Error::not_found(format!(
                 "weights file not found: {}",
@@ -1527,6 +1638,7 @@ impl SynthBuilder {
             normalize: self.normalize,
             conditioners,
             conditions: None,
+            inline_decode,
         };
 
         for (name, emb) in baked_voices {
@@ -2006,7 +2118,7 @@ mod tests {
             rx: Some(pcm_rx),
             sample_rate: 24000,
             failed: false,
-            workers: Some([backbone, decoder]),
+            workers: Some(vec![backbone, decoder]),
         };
         let (done_tx, done_rx) = mpsc::sync_channel(1);
         let dropper = std::thread::spawn(move || {
@@ -2033,7 +2145,7 @@ mod tests {
             rx: Some(rx),
             sample_rate: 24000,
             failed: false,
-            workers: Some([worker, other]),
+            workers: Some(vec![worker, other]),
         };
         assert!(stream.next().unwrap().is_err());
         assert!(stopped.load(Ordering::Acquire));
