@@ -13,6 +13,9 @@ use ptts::synth::SpeechOptions;
 /// OpenAI's limit on `input`.
 const MAX_INPUT_CHARS: usize = 4096;
 
+/// How long a client may stop reading before its response is ended and its slot freed.
+const SEND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The request body OpenAI specifies. `model`, `instructions` and `stream_format` are accepted
 /// and ignored: there is one model, it takes no style prompt, and the reply is always raw audio.
 #[derive(serde::Deserialize)]
@@ -147,9 +150,9 @@ pub async fn speech(State(app): State<AppState>, body: Bytes) -> Response {
             // The handler was cancelled during setup. Dropping the stream joins its workers.
             return;
         }
-        if let Err(e) = encode(stream, format, frame, sample_rate, &tx) {
+        if let Err(e) = encode(stream, format, frame, sample_rate, &tx, SEND_TIMEOUT) {
             tracing::warn!(error = %e, "speech request failed after it started");
-            let _ = tx.blocking_send(Err(std::io::Error::other(e.to_string())));
+            send_within(&tx, Err(std::io::Error::other(e.to_string())), SEND_TIMEOUT);
         }
     });
     match started_rx.await {
@@ -173,15 +176,16 @@ pub async fn speech(State(app): State<AppState>, body: Bytes) -> Response {
 }
 
 /// Encode `stream` frame by frame onto `tx`. Returns early, without error, once the client has
-/// gone: dropping `stream` stops the generation workers.
+/// gone or stopped reading for `timeout`: dropping `stream` stops the generation workers.
 fn encode(
     stream: impl Iterator<Item = ptts::Result<Vec<f32>>>,
     format: Format,
     frame: usize,
     sample_rate: u32,
     tx: &tokio::sync::mpsc::Sender<std::io::Result<Vec<u8>>>,
+    timeout: std::time::Duration,
 ) -> anyhow::Result<()> {
-    let send = |bytes: Vec<u8>| bytes.is_empty() || tx.blocking_send(Ok(bytes)).is_ok();
+    let send = |bytes: Vec<u8>| bytes.is_empty() || send_within(tx, Ok(bytes), timeout);
     let mut encoder = Encoder::new(format, sample_rate)?;
     if !send(encoder.header()?) {
         return Ok(());
@@ -198,6 +202,26 @@ fn encode(
     }
     send(encoder.finish()?);
     Ok(())
+}
+
+/// Send from a blocking thread, giving up if the client has not read for `timeout`. Without the
+/// limit, a client that stops reading holds its generation slot for as long as it stays connected.
+fn send_within(
+    tx: &tokio::sync::mpsc::Sender<std::io::Result<Vec<u8>>>,
+    item: std::io::Result<Vec<u8>>,
+    timeout: std::time::Duration,
+) -> bool {
+    let handle = tokio::runtime::Handle::current();
+    match handle.block_on(tokio::time::timeout(timeout, tx.send(item))) {
+        Ok(sent) => sent.is_ok(),
+        Err(_) => {
+            tracing::warn!(
+                "client stopped reading for {}s; ending the response",
+                timeout.as_secs()
+            );
+            false
+        }
+    }
 }
 
 /// A different seed per request, as `ptts-ws-server` gives each stream.
@@ -395,14 +419,29 @@ mod tests {
         let full = Arc::new(tokio::sync::Notify::new());
         let stream = EndlessAudio(produced.clone(), dropped.clone(), full.clone());
         let (tx, rx) = tokio::sync::mpsc::channel(16);
-        let producer =
-            tokio::task::spawn_blocking(move || encode(stream, Format::Pcm, 480, PCM_RATE, &tx));
+        let producer = tokio::task::spawn_blocking(move || {
+            encode(stream, Format::Pcm, 480, PCM_RATE, &tx, SEND_TIMEOUT)
+        });
         tokio::time::timeout(Duration::from_secs(2), full.notified()).await.unwrap();
         // Sixteen queued frames plus the one blocked on sending.
         assert_eq!(produced.load(Ordering::SeqCst), 17);
         drop(rx);
         tokio::time::timeout(Duration::from_secs(2), producer).await.unwrap().unwrap().unwrap();
         assert!(dropped.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn a_client_that_stops_reading_is_given_up_on() {
+        use std::time::Duration;
+
+        let stream = std::iter::repeat_with(|| Ok(vec![0.1; 480]));
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let producer = tokio::task::spawn_blocking(move || {
+            encode(stream, Format::Pcm, 480, PCM_RATE, &tx, Duration::from_millis(100))
+        });
+        // `rx` stays open and unread, as with a connected client that stopped reading.
+        tokio::time::timeout(Duration::from_secs(5), producer).await.unwrap().unwrap().unwrap();
+        drop(rx);
     }
 
     #[test]
