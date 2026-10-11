@@ -436,10 +436,11 @@ impl StringAppender {
     /// Whether `last`, the last character pushed, stays before a `.` or `,`. Quotes do: dropping
     /// a closing one would leave the opening one unbalanced. So do the symbols the rewrite rules
     /// read: `@` and `+`, which are spelled out after the rules, and the `$` of an amount, as in
-    /// "it costs 5$.".
+    /// "it costs 5$.". So do `%`, `#` and `&`, which the model reads aloud: dropping one changes
+    /// what is said.
     fn keeps(&self, last: char) -> bool {
         match last {
-            '"' | '\'' | '@' | '+' | '%' | '#' => true,
+            '"' | '\'' | '@' | '+' | '%' | '#' | '&' => true,
             '$' => self.buffer.len() >= 2 && self.buffer[self.buffer.len() - 2].is_ascii_digit(),
             _ => false,
         }
@@ -528,10 +529,13 @@ fn superscript(c: char) -> Option<char> {
 fn is_emoji(c: char) -> bool {
     let c = c as u32;
     matches!(c,
-        0x1F600..=0x1FAFF |
+        // Every pictograph block from mahjong tiles to the symbols and pictographs extension:
+        // "🎉", "🏆" and "🌍" sit below the emoticons, and flags (regional indicators) in between.
+        0x1F000..=0x1FAFF |
         0x2600..=0x27BF |
-        // Flags (regional indicator symbols)
-        0x1F1E6..=0x1F1FF
+        0x2B00..=0x2BFF |
+        // The variation selector and joiner that emoji sequences leave behind: "☀️", "👩‍💻".
+        0xFE0F | 0x200D
     )
 }
 
@@ -770,6 +774,9 @@ mod tests {
             ("user@host @home", "user at host at home"),
             ("café résumé 日本語", "café résumé 日本語"),
             ("hello 😀 flag 🇫🇷 sun ☀", "hello flag sun"),
+            ("party 🎉 cup 🏆 globe 🌍 pizza 🍕 star ⭐", "party cup globe pizza star"),
+            ("sun ☀️ dev 👩‍💻 done", "sun dev done"),
+            ("Fish &, chips &.", "Fish &, chips &."),
             // ';', '(' / ')' and a ':' next to whitespace collapse to ", " (comma + single
             // space); a ':' between two non-space characters is kept.
             ("a;b:c", "a, b:c"),
