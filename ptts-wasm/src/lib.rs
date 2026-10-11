@@ -165,6 +165,7 @@ fn record_frames<Q: BackendQ<T = f32>>(
             Some(t) => StepInput::Latent(t),
         };
         let (latent, eos_logit) = model.generate_step_parts(&mut chunk.tts_state, input, rng)?;
+        latent.device().synchronize()?;
         chunk.prev_latent = Some(latent.clone());
         latents.push(latent);
         eos_logits.push(eos_logit);
