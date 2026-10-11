@@ -63,6 +63,9 @@ public final class Phonon: @unchecked Sendable {
     /// The voices the models were exported with, sorted.
     public let voices: [String]
 
+    /// The languages the model was trained for, as its config lists them.
+    public let languages: [String]
+
     private let handle: OpaquePointer
     // Every call into the handle runs here: the Rust side is not reentrant.
     private let queue: DispatchQueue
@@ -74,8 +77,15 @@ public final class Phonon: @unchecked Sendable {
     private init(handle: OpaquePointer, queue: DispatchQueue) {
         self.handle = handle
         self.queue = queue
+        let names = Self.names(ptts_voices(handle))
+        voices = names
+        languages = Self.names(ptts_languages(handle))
+        current = Mutex(names.first ?? "")
+    }
+
+    private static func names(_ block: UnsafePointer<CChar>?) -> [String] {
         var names: [String] = []
-        if var p = ptts_voices(handle) {
+        if var p = block {
             while true {
                 let s = String(cString: p)
                 if s.isEmpty { break }
@@ -83,8 +93,7 @@ public final class Phonon: @unchecked Sendable {
                 p = p.advanced(by: s.utf8.count + 1)
             }
         }
-        voices = names
-        current = Mutex(names.first ?? "")
+        return names
     }
 
     deinit {

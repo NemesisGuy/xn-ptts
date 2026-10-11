@@ -156,6 +156,8 @@ export declare class PhononTTS {
   readonly threadsReason: string;
   /** Voices this model can speak with: bundled ones and any added. */
   readonly voices: string[];
+  /** The languages the model was trained for, as listed in its config. */
+  readonly languages: string[];
 
   /**
    * Register a voice from a voice `.safetensors` file: a precomputed embedding (`emb`) or

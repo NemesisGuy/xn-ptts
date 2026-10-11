@@ -18,6 +18,7 @@ const WEIGHTS: [(&str, Quant); 2] =
 pub struct Engine {
     synth: Synth,
     voices: Vec<String>,
+    languages: Vec<String>,
     voice: Option<String>,
     /// Samples per frame, to count frames in what the stream hands back.
     frame_size: usize,
@@ -49,11 +50,21 @@ impl Engine {
         }
         let synth = builder.build().map_err(|e| e.to_string())?;
         let frame_size = (synth.sample_rate() as f64 / frame_rate).round() as usize;
-        Ok(Self { voices: synth.voices(), voice: synth.default_voice(), synth, frame_size })
+        Ok(Self {
+            voices: synth.voices(),
+            languages: synth.languages().to_vec(),
+            voice: synth.default_voice(),
+            synth,
+            frame_size,
+        })
     }
 
     pub fn voices(&self) -> &[String] {
         &self.voices
+    }
+
+    pub fn languages(&self) -> &[String] {
+        &self.languages
     }
 
     /// Switch to one of [`Self::voices`].

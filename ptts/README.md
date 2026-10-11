@@ -56,7 +56,7 @@ Reuse the loaded model for later requests. `tts.stream(text)?` yields bounded PC
 
 ## Voices and generation
 
-`tts.voices()` lists registered voices. When a request selects none, the builder's configured voice is used, then `default`, then the first registered voice by name. With no registered voice, synthesis is unconditioned.
+`tts.voices()` lists registered voices, and `tts.languages()` the languages the checkpoint's config says it was trained for. When a request selects none, the builder's configured voice is used, then `default`, then the first registered voice by name. With no registered voice, synthesis is unconditioned.
 
 Choose a registered voice per request with `SpeechOptions::voice`:
 
