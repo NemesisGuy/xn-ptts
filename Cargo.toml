@@ -50,6 +50,7 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1.44"
 tracing-chrome = "0.7.2"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

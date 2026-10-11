@@ -18,7 +18,8 @@ pub(super) fn numbers(word: &str, lang: Lang) -> Option<String> {
         return Some(format!("{words}{suffix}"));
     }
     let (head, tail) = word.split_at(word.find('-')?);
-    if !tail[1..].starts_with(|c: char| c.is_alphabetic()) {
+    // A tail with `@` or `+` is left to the email rule and the symbol pass, which read them.
+    if !tail[1..].starts_with(|c: char| c.is_alphabetic()) || tail.contains(['@', '+']) {
         return None;
     }
     match number_words(head, lang)? {
@@ -256,6 +257,7 @@ mod tests {
             ("0600.", Some("zero six zero zero.")),
             ("7,000-ton", Some("7 thousand-ton")),
             ("20-year-old", Some("20-year-old")),
+            ("5-contact@example.com", None),
             ("20-25", Some("20 to 25")),
             ("10-5", None),
             ("22-22", None),

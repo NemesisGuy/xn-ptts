@@ -593,6 +593,7 @@ fn is_single_quote(c: char) -> bool {
 
 /// Rewrite `input` into the character set the model was trained on.
 ///
+/// Accents are composed with their letters, and an accent that composes with none is dropped.
 /// Typographic quotes, dashes, bullets, arrows and emoji are dropped or folded to their ASCII
 /// equivalents; `@`, `+` and `=` are spelled out in `lang`; `;`, parentheses and a `:` with
 /// whitespace on either side become commas, which is how the model is asked to pause. A `:`
@@ -601,8 +602,10 @@ fn is_single_quote(c: char) -> bool {
 /// Then each word goes to the `rules`, and `@` and `+` are spelled out only in the words no rule
 /// claimed, since the email and phone rules read them.
 pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
+    use unicode_normalization::UnicodeNormalization;
     let mut res = StringAppender::new();
-    let mut chars = input.chars().peekable();
+    // Composed, so a decomposed "e" and accent becomes the "é" the tokenizer has a piece for.
+    let mut chars = input.nfc().peekable();
     let mut prev = None;
     while let Some(c) = chars.next() {
         match c {
@@ -687,6 +690,8 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
                 res.push(',');
                 res.push_whitespace();
             }
+            // An accent left over after composition belongs to no letter these languages use.
+            c if unicode_normalization::char::is_combining_mark(c) => {}
             c => {
                 if is_emoji(c) || c.is_control() || c.is_whitespace() {
                     res.push_whitespace();
@@ -773,6 +778,9 @@ mod tests {
             ("wait… a…b", "wait. a.b"),
             ("user@host @home", "user at host at home"),
             ("café résumé 日本語", "café résumé 日本語"),
+            // Decomposed accents are composed, and stray ones dropped.
+            ("cafe\u{301} re\u{301}sume\u{301}", "café résumé"),
+            ("e\u{301}\u{301}\u{301}\u{301} x\u{301} test", "é x test"),
             ("hello 😀 flag 🇫🇷 sun ☀", "hello flag sun"),
             ("party 🎉 cup 🏆 globe 🌍 pizza 🍕 star ⭐", "party cup globe pizza star"),
             ("sun ☀️ dev 👩‍💻 done", "sun dev done"),
