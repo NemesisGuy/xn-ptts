@@ -104,7 +104,9 @@ impl Engine {
         // longer than the model says in one go.
         let fit_max = max.min(ptts::plan::MAX_FIT_TOKENS);
         let planned = ptts::plan::chunks(&self.tokenizer, text, self.normalize, max, FRAME_RATE)
-            .and_then(|chunks| ptts::plan::fit(chunks, fit_max, &self.tokenizer, FRAME_RATE))
+            .and_then(|chunks| {
+                ptts::plan::fit_with_word_limit(chunks, fit_max, max, &self.tokenizer, FRAME_RATE)
+            })
             .map_err(|e| e.to_string())?;
         let mut chunks = Vec::new();
         for chunk in planned.into_iter().filter(|c| !c.tokens.is_empty()) {

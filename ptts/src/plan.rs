@@ -170,6 +170,21 @@ pub fn fit(
     tokenizer: &dyn Tokenizer,
     frame_rate: f64,
 ) -> Result<Vec<Chunk>> {
+    fit_with_word_limit(chunks, max, max, tokenizer, frame_rate)
+}
+
+/// Cut chunks toward `max` tokens while keeping a single word intact when it fits
+/// `word_limit`. Use this when the model accepts a longer word than the preferred
+/// chunk size. The result may contain single-word chunks over `max`, but never over
+/// `word_limit` unless even one character is too large.
+pub fn fit_with_word_limit(
+    chunks: Vec<Chunk>,
+    max: usize,
+    word_limit: usize,
+    tokenizer: &dyn Tokenizer,
+    frame_rate: f64,
+) -> Result<Vec<Chunk>> {
+    let word_limit = word_limit.max(max);
     let mut fitted = Vec::with_capacity(chunks.len());
     let mut todo: Vec<Chunk> = chunks.into_iter().rev().collect();
     while let Some(chunk) = todo.pop() {
@@ -182,6 +197,10 @@ pub fn fit(
             let (a, b) = words.split_at(cut(&words, max.div_ceil(4), tokenizer)?);
             [a.join(" "), b.join(" ")]
         } else {
+            if chunk.tokens.len() <= word_limit {
+                fitted.push(chunk);
+                continue;
+            }
             let word = chunk.text.trim();
             match word.char_indices().nth(word.chars().count() / 2) {
                 Some((mid, _)) if mid > 0 => [word[..mid].to_string(), word[mid..].to_string()],
@@ -441,6 +460,19 @@ mod tests {
         let chunk = Chunk::new("é".repeat(9), &Chars, 12.5).unwrap();
         let fitted = fit(vec![chunk], 4, &Chars, 12.5).unwrap();
         assert_eq!(fitted.iter().map(|c| c.text.as_str()).collect::<String>(), "é".repeat(9));
+    }
+
+    #[test]
+    fn fit_keeps_a_word_that_fits_the_models_larger_limit() {
+        let chunk = Chunk::new("hi abcdefghijkl bye".to_string(), &Chars, 12.5).unwrap();
+        let fitted = fit_with_word_limit(vec![chunk], 5, 13, &Chars, 12.5).unwrap();
+        assert_eq!(texts(&fitted), ["hi", "abcdefghijkl", "bye"]);
+        assert_eq!(prompts(&fitted), ["Hi.", "Abcdefghijkl.", "Bye."]);
+
+        let chunk = Chunk::new("abcdefghijklmnop".to_string(), &Chars, 12.5).unwrap();
+        let fitted = fit_with_word_limit(vec![chunk], 5, 13, &Chars, 12.5).unwrap();
+        assert_eq!(texts(&fitted), ["abcdefgh", "ijklmnop"]);
+        assert!(fitted.iter().all(|piece| piece.tokens.len() <= 13));
     }
 
     #[test]
