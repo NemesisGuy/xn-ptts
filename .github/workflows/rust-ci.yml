@@ -219,6 +219,12 @@ jobs:
         env:
           RUSTFLAGS: -C target-feature=+simd128,+relaxed-simd
         run: cargo check -p ptts-wasm --target wasm32-unknown-unknown --all-targets --features webgpu
+      # The same without Relaxed SIMD, which Safari lacks, and so every browser on iOS: the
+      # package ships these modules too, and xn's kernels must keep building without it.
+      - name: Check the browser build without Relaxed SIMD
+        env:
+          RUSTFLAGS: -C target-feature=+simd128
+        run: cargo check -p ptts-wasm --target wasm32-unknown-unknown --all-targets --features webgpu
       # The JS wrapper that `phonon-tts` ships around this build. Its tests need neither a
       # browser nor a model; building the package itself is `npm-publish.yml`'s job.
       #

@@ -130,6 +130,17 @@ test('model files may be URL objects, as workerUrl and wasmUrl may', async () =>
   assert.equal(FakeWorker.last.init.model.weights.q8, 'https://example.com/m/model.q8.gguf');
 });
 
+test('every module URL reaches the worker resolved, the SIMD-only ones too', async () => {
+  const urls = {
+    wasmUrl: 'https://example.com/w/phonon_tts_bg.wasm',
+    threadsWasmUrl: 'https://example.com/t/phonon_tts_bg.wasm',
+    simdWasmUrl: new URL('https://example.com/w/phonon_tts_simd_bg.wasm'),
+    threadsSimdWasmUrl: 'https://example.com/t/phonon_tts_simd_bg.wasm',
+  };
+  await PhononTTS.load({ lang: 'en', model: MODEL, workerUrl: 'worker.js', ...urls });
+  for (const [key, value] of Object.entries(urls)) assert.equal(FakeWorker.last.init[key], String(value));
+});
+
 test('lang is required', async () => {
   await assert.rejects(PhononTTS.load({ model: MODEL }), /lang is required/);
   await assert.rejects(PhononTTS.load({ lang: 'xx', model: MODEL }), /lang is required/);

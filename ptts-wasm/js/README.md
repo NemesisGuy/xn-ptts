@@ -78,7 +78,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 | `onProgress` | | `({ file, loaded, total, cached }) => void`, for a progress bar |
 | `device` | `'cpu'` | `'cpu'`, `'webgpu'` or `'auto'`: where to generate, see [WebGPU](#webgpu) |
 | `threads` | `'auto'` | CPU threads to generate on, or `'auto'` for 3. Needs a cross-origin isolated page, see [Threads](#threads) |
-| `workerUrl`, `wasmUrl`, `threadsWasmUrl` | beside `index.js` | for setups that serve the package's files from elsewhere |
+| `workerUrl`, `wasmUrl`, `threadsWasmUrl`, `simdWasmUrl`, `threadsSimdWasmUrl` | beside `index.js` | for setups that serve the package's files from elsewhere |
 
 ### Instance
 
@@ -130,7 +130,7 @@ The model runs in a dedicated Web Worker, on the GPU through WebGPU when the bro
 
 Requirements:
 
-- A browser with WebAssembly SIMD and Relaxed SIMD, and module workers. Tested in Chrome and Firefox. A browser without Relaxed SIMD cannot load the module, and `load` rejects with an error saying so.
+- A browser with WebAssembly SIMD and module workers. Browsers with Relaxed SIMD get a faster build; others, such as Safari and every browser on iOS, load one without it. A browser without SIMD cannot load the module, and `load` rejects with an error saying so.
 - A secure context (`https://` or `localhost`) for caching. Elsewhere it still works, but downloads again on every load.
 
 How close to real time it gets depends on the device, on [WebGPU](#webgpu) and on [threads](#threads), and `q8` is noticeably faster than `f32`.

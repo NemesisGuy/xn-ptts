@@ -78,4 +78,24 @@ if (existsSync(join(threads, 'phonon_tts_bg.wasm'))) {
   writeFileSync(helpers[0], after);
 }
 
+// The builds without Relaxed SIMD, for browsers that lack it, when they ran. Only their
+// module is kept, beside the Relaxed one: the worker loads it through the same JS, which
+// only works while wasm-bindgen generates the same JS for both. Checked here rather than
+// assumed. Comment lines are left out of the comparison: wasm-bindgen notes internal
+// indices in them that differ between builds.
+for (const [build, simd] of [['wasm', 'wasm-simd'], ['wasm-threads', 'wasm-threads-simd']]) {
+  const from = join(out, simd);
+  if (!existsSync(join(from, 'phonon_tts_bg.wasm'))) {
+    console.warn(`no ${simd} build: browsers without Relaxed SIMD cannot load ${build}/`);
+    continue;
+  }
+  const glue = (dir) => readFileSync(join(dir, 'phonon_tts.js'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+  if (glue(from) !== glue(join(out, build))) {
+    console.error(`${simd}/phonon_tts.js differs from ${build}/phonon_tts.js: the two modules need the same JS`);
+    process.exit(1);
+  }
+  copyFileSync(join(from, 'phonon_tts_bg.wasm'), join(out, build, 'phonon_tts_simd_bg.wasm'));
+  rmSync(from, { recursive: true, force: true });
+}
+
 console.log(`phonon-tts@${version} assembled in ${out}`);

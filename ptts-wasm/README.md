@@ -65,7 +65,7 @@ Supply the checkpoint URLs through `ModelSpec`. Use pinned HF revisions or versi
 
 ## Known limits
 
-- The module needs WebAssembly Relaxed SIMD. `xn`'s quantized kernels call `f32x4_relaxed_madd` unconditionally, so a browser without it cannot compile the module, even for f32 weights.
+- The module needs WebAssembly SIMD. Each build ships twice, with and without Relaxed SIMD, and `js/worker.js` loads the Relaxed one only where the browser has it (`js/simd.js`). Safari has no Relaxed SIMD, so neither has any browser on iOS; there the CPU runs slower.
 - No voice cloning: the Mimi encoder is not in the browser build.
 - Threads need a cross-origin isolated page. Elsewhere generation runs on one thread.
 - WebGPU needs `q8` weights in a GGUF file: quantizing `f32` weights on the GPU would read each one back to the host.
