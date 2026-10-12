@@ -70,7 +70,7 @@ let pcm = tts.say_with("Hello world", &options)?;
 
 The same options let you set `temperature`, `seed`, and `max_tokens_per_chunk`. Options left unset use the builder's settings.
 
-Long text is grouped at sentence boundaries, usually aiming for 50 text tokens per chunk. A sentence may exceed that target. Sentences over 200 tokens are split at a sentence or clause mark when possible, otherwise at a word boundary. An indivisible piece over 200 tokens returns an input error. Each piece starts from the selected voice prompt.
+Long text is grouped at sentence boundaries, usually aiming for 50 text tokens per chunk. A sentence may exceed that target. Sentences over 200 tokens are split at a sentence or clause mark when possible, otherwise at a word boundary. A single word over 200 tokens, such as a long hash or digit run, is cut between its characters. Each piece starts from the selected voice prompt.
 
 ## Repeated requests
 

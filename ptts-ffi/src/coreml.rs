@@ -111,7 +111,7 @@ impl Engine {
             // Only a single character that is too long is left uncut.
             if chunk.tokens.len() > max {
                 return Err(format!(
-                    "one word is {} tokens, over the {max} the model takes",
+                    "one character is {} tokens, over the {max} the model takes",
                     chunk.tokens.len()
                 ));
             }

@@ -1712,8 +1712,8 @@ pub trait SynthApi: sealed::Sealed + Send + Sync {
     /// session is dropped. At 12.5 Hz a full [`MAX_TOKENS_PER_CHUNK`]-token
     /// chunk needs 796, so 1024 covers the usual target. Further sentences use
     /// the same cache. A single sentence too long for the budget, or longer than
-    /// [`plan::MAX_FIT_TOKENS`], is cut with [`plan::fit`]; an indivisible chunk
-    /// that still exceeds either limit is rejected.
+    /// [`plan::MAX_FIT_TOKENS`], is cut with [`plan::fit`], down to single characters
+    /// if needed. A single character that still exceeds either limit is rejected.
     fn session(&self, opts: &SpeechOptions, max_seq_len: usize) -> Result<Session>;
 
     /// Start generating `text` with per-request overrides.
