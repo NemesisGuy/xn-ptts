@@ -731,6 +731,29 @@ impl Model {
         })
     }
 
+    /// Waits for the work the device has queued. On WebGPU, `add_voice` only records a voice's
+    /// prompt, and the GPU runs it here rather than inside the first step that speaks. The CPU
+    /// has nothing queued. Resolves at once while a `generation_step` holds the model, which
+    /// waits for the GPU itself.
+    pub fn flush(&self) -> js_sys::Promise {
+        let cell = Rc::clone(&self.loaded);
+        wasm_bindgen_futures::future_to_promise(async move {
+            #[cfg(feature = "webgpu")]
+            {
+                let device = cell.borrow().as_ref().and_then(|l| match &l.engine {
+                    AnyEngine::WebGpuQ8(e) => Some(e.device.clone()),
+                    _ => None,
+                });
+                if let Some(device) = device {
+                    device.flush_async().await.map_err(js_err)?;
+                }
+            }
+            #[cfg(not(feature = "webgpu"))]
+            let _ = cell;
+            Ok(JsValue::UNDEFINED)
+        })
+    }
+
     /// Drops the generation in progress, if any. Called while a `generation_step` is pending,
     /// it takes effect when that step returns: the step still delivers its frames, and the
     /// next one reports the end.

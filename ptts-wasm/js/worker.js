@@ -172,7 +172,7 @@ function voiceIndex(name, onProgress) {
       return Promise.reject(new Error(`unknown voice '${name}'; known: ${known.join(', ')}`));
     }
     entry = fetchBytes(url, { cache: settings.cache, onProgress })
-      .then((bytes) => model.add_voice(bytes))
+      .then((bytes) => registerVoice(bytes))
       .catch((e) => {
         voices.delete(name); // let a later call retry
         throw e;
@@ -184,7 +184,25 @@ function voiceIndex(name, onProgress) {
 
 async function handleAddVoice(name, source) {
   const bytes = typeof source === 'string' ? await fetchBytes(source, { cache: settings.cache }) : new Uint8Array(source);
-  voices.set(name, model.add_voice(bytes));
+  const index = registerVoice(bytes);
+  voices.set(name, index);
+  try {
+    await index;
+  } catch (e) {
+    voices.delete(name); // let a later call retry
+    throw e;
+  }
+}
+
+/**
+ * Registers a voice and waits until the device has run its prompt. On WebGPU that is only
+ * recorded otherwise, and runs inside the next generation: after preloading several voices,
+ * the first one spoken would pay for all of them.
+ */
+async function registerVoice(bytes) {
+  const index = model.add_voice(bytes);
+  await model.flush();
+  return index;
 }
 
 async function handleGenerate(id, { text, voice, temperature, seed }) {
