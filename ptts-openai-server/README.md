@@ -102,7 +102,7 @@ docker run -p 10200:10200 -v "$MODEL_DIR:/models:ro" \
 
 Then, in Home Assistant, add the **Wyoming Protocol** integration with this machine's address and port `10200`. Phonon appears as a text-to-speech engine that you can pick in a voice assistant. On Home Assistant OS, the [Phonon app](https://github.com/gradium-ai/phonon-home-assistant) runs the server for you, and Home Assistant finds it on its own.
 
-- **Voices and languages.** Home Assistant names a voice in each request but never a language. When the checkpoint's config lists no languages, every voice speaks the `--lang` language. When it lists several, each voice is listed once per language as `VOICE-LANG` (for example `default-fr`), and text is normalized for that language with the `--rewrites` rules. Pick a voice in the assistant's settings for a language other than `--lang`.
+- **Language.** Every voice is listed in the `--lang` language, which must not be `none`: Home Assistant names a voice in each request but never a language. For a second language, run a second server.
 - **Streaming.** Home Assistant sends an assistant's reply while it is still being written. The server speaks it a sentence at a time, so speech starts with the first sentence, not after the last.
 - **Busy server.** Wyoming requests share the HTTP API's `--max-concurrent-requests` slots. They wait for a free slot instead of failing.
 - **Access.** Like the HTTP API, the Wyoming port has no authentication. Publish it only on a network you trust.

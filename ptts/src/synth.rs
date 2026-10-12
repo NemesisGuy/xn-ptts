@@ -227,9 +227,6 @@ pub struct SpeechOptions {
     pub max_tokens_per_chunk: Option<usize>,
     /// Audio modules run over the PCM, in order, before it is handed out.
     pub post_process: Option<Vec<ModuleConfig>>,
-    /// How this request's text is normalized, for a server whose requests come in several
-    /// languages. Not set, the [`SynthBuilder`]'s policy applies.
-    pub normalize: Option<Normalize>,
 }
 
 impl SpeechOptions {
@@ -262,11 +259,6 @@ impl SpeechOptions {
         self.post_process = Some(modules.into_iter().collect());
         self
     }
-
-    pub fn normalize(mut self, normalize: impl Into<Normalize>) -> Self {
-        self.normalize = Some(normalize.into());
-        self
-    }
 }
 
 /// Defaults applied to every request unless overridden per call.
@@ -278,8 +270,6 @@ struct Defaults {
     cfg_coef: Option<f32>,
     max_tokens_per_chunk: usize,
     post_process: Vec<ModuleConfig>,
-    /// How text is normalized. See [`SynthBuilder::new`].
-    normalize: Normalize,
 }
 
 /// Merge per-request overrides onto the settings a [`SynthBuilder`] was given.
@@ -311,7 +301,6 @@ fn resolve(defaults: &Defaults, opts: &SpeechOptions) -> Result<Defaults> {
         },
         max_tokens_per_chunk: opts.max_tokens_per_chunk.unwrap_or(defaults.max_tokens_per_chunk),
         post_process: opts.post_process.clone().unwrap_or_else(|| defaults.post_process.clone()),
-        normalize: opts.normalize.unwrap_or(defaults.normalize),
     })
 }
 
@@ -333,6 +322,8 @@ struct SynthOf<Q: BackendQ> {
     cfg: TTSConfig,
     voices: BTreeMap<String, Voice<Q>>,
     defaults: Defaults,
+    /// How every request's text is normalized. See [`SynthBuilder::new`].
+    normalize: Normalize,
     /// Each voice's primed KV prefix, keyed by name and by whether guidance is on: the null
     /// branch's prefix differs, the coefficient does not enter the state. Sized to the prompt;
     /// copied out to each generation's budget.
@@ -374,7 +365,7 @@ impl<Q: BackendQ> SynthOf<Q> {
             base,
             cfg_base,
             seq_budget,
-            normalize: settings.normalize,
+            normalize: self.normalize,
             post_process: settings.post_process.clone(),
             inline_decode: self.inline_decode,
         })
@@ -533,7 +524,7 @@ impl<Q: BackendQ> SynthApi for SynthOf<Q> {
     }
 
     fn normalization(&self) -> Normalize {
-        self.defaults.normalize
+        self.normalize
     }
 
     fn device_name(&self) -> String {
@@ -747,7 +738,7 @@ impl<Q: BackendQ> SynthApi for SynthOf<Q> {
             self.cfg.mimi.frame_rate,
             text,
             settings.max_tokens_per_chunk,
-            settings.normalize,
+            self.normalize,
             Some(plan::MAX_FIT_TOKENS),
         )?;
         // A one-shot call is a session sized to this text and dropped afterwards,
@@ -1643,8 +1634,8 @@ impl SynthBuilder {
                 cfg_coef: self.cfg_coef,
                 max_tokens_per_chunk: self.max_tokens_per_chunk,
                 post_process: self.post_process.clone(),
-                normalize: self.normalize,
             },
+            normalize: self.normalize,
             conditioners,
             conditions: None,
             inline_decode,
@@ -2015,7 +2006,6 @@ mod tests {
             cfg_coef: None,
             max_tokens_per_chunk: 50,
             post_process: vec![],
-            normalize: Normalize::for_lang(Lang::En),
         }
     }
 
@@ -2063,13 +2053,6 @@ mod tests {
         assert_eq!(one.seed, 99);
         assert_eq!(one.temperature, 0.5);
         assert_eq!(one.voice.as_deref(), Some("alba"));
-        assert_eq!(one.normalize, Normalize::for_lang(Lang::En));
-
-        // A server whose requests come in several languages picks one per request.
-        let french = SpeechOptions::default().normalize(Lang::Fr);
-        assert_eq!(resolve(&defaults(), &french).unwrap().normalize, Normalize::for_lang(Lang::Fr));
-        let off = SpeechOptions::default().normalize(Normalize::OFF);
-        assert_eq!(resolve(&defaults(), &off).unwrap().normalize, Normalize::OFF);
     }
 
     /// The builder carries the policy it was constructed with, unchanged:

@@ -531,7 +531,6 @@ impl Tts {
             cfg_coef,
             max_tokens_per_chunk: None,
             post_process: None,
-            normalize: None,
         }
     }
 

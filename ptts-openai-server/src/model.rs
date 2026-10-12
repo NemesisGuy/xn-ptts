@@ -25,7 +25,7 @@ pub struct Inner {
     pub model_name: String,
     /// Where the checkpoint is from: its Hub page, or this repository for a local folder.
     pub model_url: String,
-    /// How a request's text is normalized when it does not name a language.
+    /// How text is normalized. Wyoming lists the voices in its language.
     pub normalize: Normalize,
     pub voices: Vec<String>,
     pub seed_base: u64,
