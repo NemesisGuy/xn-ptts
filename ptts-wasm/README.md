@@ -18,6 +18,8 @@ The browser build of [Phonon](../ptts/), published to npm as [`phonon-tts`](http
 // device is 'cpu' or 'webgpu'; WebGPU needs q8 weights in a GGUF file.
 const model = await Model.load(modelWeights, tokenizerJson, configJson, quant, lang, rewrites, conditions, device);
 const voiceIndex = model.add_voice(voiceBytes);
+// On WebGPU the voice's prompt is only recorded; this runs it now rather than in the first step.
+await model.flush();
 
 // Splits and tokenizes. Runs no model, and returns the number of chunks.
 model.start_generation(voiceIndex, text, temperature, seed);
