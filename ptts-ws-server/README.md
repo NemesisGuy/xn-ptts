@@ -11,4 +11,4 @@ The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts
 
 By default, one WebSocket session is accepted at a time. `--max-concurrent-requests N` sets a positive limit. Excess connections receive HTTP 429 before the WebSocket upgrade, with a message asking the client to retry after an active session closes.
 
-A session retains its primed voice and KV cache between messages. Its slot is held for the entire connection, including while idle, and released after the session and generation workers stop. Close connections when finished so other clients can connect. The limit applies to connections, including those awaiting their first setup message.
+A session retains its primed voice and KV cache between messages. Its slot is held for the entire connection, and released after the session and generation workers stop. Close connections when finished so other clients can connect. A session that sends no message for five minutes while no audio is being generated gets an error with code 408 and is closed. A client that stops reading for 30 seconds is disconnected. The limit applies to connections, including those awaiting their first setup message.
