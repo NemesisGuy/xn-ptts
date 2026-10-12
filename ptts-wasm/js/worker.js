@@ -155,6 +155,7 @@ async function handleInit(id, options) {
     sampleRate: model.sample_rate(),
     features: wasm.cpu_features(),
     device: model.device(),
+    languages: model.languages(),
     deviceReason,
     threads,
     threadsReason,

@@ -43,6 +43,8 @@ export class PhononTTS {
   threads;
   /** Why `threads` is what it is, e.g. `'default'` or `'the page is not cross-origin isolated'`. */
   threadsReason;
+  /** The languages the model was trained for, as listed in its config. */
+  languages;
 
   /**
    * Download (or read from cache) a checkpoint and start it in a worker.
@@ -165,6 +167,7 @@ export class PhononTTS {
       tts.sampleRate = reply.sampleRate;
       tts.features = reply.features;
       tts.device = reply.device;
+      tts.languages = reply.languages;
       tts.deviceReason = reply.deviceReason;
       tts.threads = reply.threads;
       tts.threadsReason = reply.threadsReason;

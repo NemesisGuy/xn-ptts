@@ -49,13 +49,14 @@ APK.
 
 ## 3. The interface
 
-[`ptts.h`](../ptts-ffi/include/ptts.h) has six calls:
+[`ptts.h`](../ptts-ffi/include/ptts.h) has seven calls:
 
 | Call | What it does |
 |---|---|
 | `ptts_new(dir, PTTS_UNIT_CPU, lang)` | Load the model folder. This is the slow call. |
 | `ptts_voices(h)` | The voice names, as one block of NUL-separated strings. |
 | `ptts_set_voice(h, name)` | Speak in one of them from now on. |
+| `ptts_languages(h)` | The languages the model was trained for, in the same format. |
 | `ptts_speak(h, text, callback, user, &result)` | Speak `text`, passing the audio to `callback` as it is made. |
 | `ptts_last_error(h)` | Why the last call failed. Pass `NULL` after a failed `ptts_new`. |
 | `ptts_free(h)` | Free the model. Nothing else does. |
@@ -154,8 +155,8 @@ if (!ptts_speak(h, "Hello from Phonon.", on_audio, NULL, &result)) {
 ptts_free(h);
 ```
 
-`ptts_speak` and `ptts_set_voice` return `false` on failure. Strings from `ptts_voices` and
-`ptts_last_error` belong to the library: copy them if you keep them.
+`ptts_speak` and `ptts_set_voice` return `false` on failure. Strings from `ptts_voices`,
+`ptts_languages` and `ptts_last_error` belong to the library: copy them if you keep them.
 
 ### Flutter, Unity, .NET and other frameworks
 

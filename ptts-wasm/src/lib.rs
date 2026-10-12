@@ -165,6 +165,7 @@ fn record_frames<Q: BackendQ<T = f32>>(
             Some(t) => StepInput::Latent(t),
         };
         let (latent, eos_logit) = model.generate_step_parts(&mut chunk.tts_state, input, rng)?;
+        latent.device().synchronize()?;
         chunk.prev_latent = Some(latent.clone());
         latents.push(latent);
         eos_logits.push(eos_logit);
@@ -728,6 +729,11 @@ impl Model {
             Ok((sample_rate as f64 / l.cfg.mimi.frame_rate).round() as usize)
         })
         .map_err(js_err)
+    }
+
+    /// The languages the model was trained for, as listed in its config.
+    pub fn languages(&self) -> std::result::Result<Vec<String>, JsError> {
+        self.with(|l| Ok(l.cfg.languages.clone())).map_err(js_err)
     }
 
     /// `"cpu"` or `"webgpu"`: where this model runs.

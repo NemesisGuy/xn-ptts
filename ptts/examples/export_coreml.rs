@@ -267,6 +267,7 @@ fn main() -> Result<()> {
             "ldim": dims.ldim, "flow_d": dims.flow_d, "flow_blocks": dims.flow_blocks,
         },
         "voices": voices.iter().map(|(n, _, _)| n).collect::<Vec<_>>(),
+        "languages": cfg.languages,
         "conditions": given,
         "files": files,
     });

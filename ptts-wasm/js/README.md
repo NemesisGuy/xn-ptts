@@ -87,6 +87,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 - `tts.synthWav(text, options)` returns a WAV `Blob`.
 - `tts.voices`: the names you can pass as `voice`: the keys of `model.voices`, plus any added with `addVoice`.
 - `tts.addVoice(name, source)` registers a voice from a URL, `Blob` or bytes of a voice `.safetensors` file.
+- `tts.languages`: the languages the checkpoint's config says it was trained for.
 - `tts.sampleRate`: 24000.
 - `tts.device`: `'webgpu'` or `'cpu'`, where generation runs, and `tts.deviceReason` why.
 - `tts.threads`: the CPU threads generation runs on, and `tts.threadsReason` why that many.
