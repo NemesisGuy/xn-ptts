@@ -9,6 +9,7 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 [![Browser package](https://github.com/gradium-ai/xn-ptts/actions/workflows/npm-publish.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/npm-publish.yml)
 [![Native packages](https://github.com/gradium-ai/xn-ptts/actions/workflows/cli-release.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/cli-release.yml)
 [![Docker builds](https://github.com/gradium-ai/xn-ptts/actions/workflows/docker.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/docker.yml)
+
 [![Code license: MIT OR Apache-2.0](https://img.shields.io/badge/code-MIT%20OR%20Apache--2.0-blue)](#license)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/T85yt8kD33)
 
