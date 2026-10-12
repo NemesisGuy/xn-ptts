@@ -4,11 +4,15 @@ services:
     image: "${PTTS_IMAGE:-ghcr.io/gradium-ai/ptts-openai-server:latest}"
     ports:
       - "8880:8880"
+      # For Home Assistant, with PTTS_WYOMING_ADDR below.
+      # - "10200:10200"
     environment:
       PTTS_CONFIG: "${PTTS_CONFIG:?Set PTTS_CONFIG to a Hugging Face model repo}"
       PTTS_REVISION: "${PTTS_REVISION:-main}"
       PTTS_LANG: "${PTTS_LANG:?Set PTTS_LANG to a supported normalization language}"
       PTTS_QUANT: q8
+      # Serve the Wyoming protocol, which Home Assistant uses, as well as the OpenAI API.
+      # PTTS_WYOMING_ADDR: 0.0.0.0:10200
       # Pass through authentication only when it is set on the host.
       HF_TOKEN:
       HF_HOME: /home/phonon/.cache/huggingface

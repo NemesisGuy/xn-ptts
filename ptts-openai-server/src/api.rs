@@ -225,7 +225,7 @@ fn send_within(
 }
 
 /// A different seed per request, as `ptts-ws-server` gives each stream.
-fn next_seed(base: u64) -> u64 {
+pub fn next_seed(base: u64) -> u64 {
     static REQUESTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     base ^ n.wrapping_mul(0x9E37_79B9_7F4A_7C15)
