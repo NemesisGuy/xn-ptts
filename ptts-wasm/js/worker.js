@@ -9,6 +9,7 @@
 import { fetchBytes } from './fetch.js';
 import { chooseDevice, isGguf } from './device.js';
 import { chooseThreads } from './threads.js';
+import { hasRelaxedSimd } from './simd.js';
 
 let model = null;
 /** Samples per frame: a generation step returns a whole number of them. */
@@ -33,6 +34,18 @@ const yieldToEventLoop = () =>
   });
 
 /**
+ * Each build comes as two modules with the same JS: one using WebAssembly Relaxed SIMD and
+ * one without, for browsers that lack it. This picks the one the browser can compile, and
+ * hands the JS its URL. The `new URL` calls name their file literally, so a bundler emits
+ * the module beside the JS as it does the default one.
+ */
+const RELAXED_SIMD = hasRelaxedSimd();
+function moduleFor(relaxedUrl, simdUrl, simdDefault) {
+  if (RELAXED_SIMD) return relaxedUrl ? { module_or_path: relaxedUrl } : undefined;
+  return { module_or_path: simdUrl ?? simdDefault };
+}
+
+/**
  * Load the wasm build to run on the CPU, and start its threads.
  *
  * There are two builds. `wasm-threads/` runs generation on several threads, but its memory
@@ -54,7 +67,13 @@ async function loadWasm(options) {
   if (choice.threads > 1) {
     try {
       const wasm = await import('./wasm-threads/phonon_tts.js');
-      await wasm.default(options.threadsWasmUrl ? { module_or_path: options.threadsWasmUrl } : undefined);
+      await wasm.default(
+        moduleFor(
+          options.threadsWasmUrl,
+          options.threadsSimdWasmUrl,
+          new URL('./wasm-threads/phonon_tts_simd_bg.wasm', import.meta.url),
+        ),
+      );
       const workers = choice.threads - 1;
       // rayon's Web Workers first, then xn's CPU pool on them; both before any model loads.
       await wasm.initThreadPool(workers);
@@ -75,11 +94,13 @@ async function loadWasm(options) {
 async function loadSingleThreaded(options) {
   const wasm = await import('./wasm/phonon_tts.js');
   try {
-    await wasm.default(options.wasmUrl ? { module_or_path: options.wasmUrl } : undefined);
+    await wasm.default(
+      moduleFor(options.wasmUrl, options.simdWasmUrl, new URL('./wasm/phonon_tts_simd_bg.wasm', import.meta.url)),
+    );
   } catch (e) {
     if (e instanceof WebAssembly.CompileError) {
       throw new Error(
-        `this browser cannot run phonon-tts: it needs WebAssembly SIMD and Relaxed SIMD (${e.message})`,
+        `this browser cannot run phonon-tts: it needs WebAssembly SIMD (${e.message})`,
       );
     }
     throw e;

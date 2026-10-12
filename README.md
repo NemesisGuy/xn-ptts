@@ -221,7 +221,7 @@ const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 
 Use the returned `Blob` for a download link or your audio player. `tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the [browser guide](ptts-wasm/js/README.md#streaming) includes a complete Web Audio example. Call `tts.dispose()` when finished with the model.
 
-The first load downloads and caches the files. `onProgress` reports download progress. Serve over HTTPS or localhost for caching, and use a browser with WebAssembly Relaxed SIMD. CPU is the default. Threading and WebGPU setup are covered in the [browser guide →](ptts-wasm/js/README.md).
+The first load downloads and caches the files. `onProgress` reports download progress. Serve over HTTPS or localhost for caching, and use a browser with WebAssembly SIMD. CPU is the default. Threading and WebGPU setup are covered in the [browser guide →](ptts-wasm/js/README.md).
 
 </details>
 

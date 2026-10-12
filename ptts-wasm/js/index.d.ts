@@ -72,6 +72,12 @@ export interface LoadOptions {
   /** The same for the threaded build, `wasm-threads/phonon_tts_bg.wasm`. */
   threadsWasmUrl?: string | URL;
   /**
+   * The same for the modules browsers without WebAssembly Relaxed SIMD load, such as Safari:
+   * `wasm/phonon_tts_simd_bg.wasm` and `wasm-threads/phonon_tts_simd_bg.wasm`.
+   */
+  simdWasmUrl?: string | URL;
+  threadsSimdWasmUrl?: string | URL;
+  /**
    * CPU threads to generate on, counting the worker that owns the model. Default `'auto'`:
    * 3, or fewer if the device has fewer cores. Threads
    * need a cross-origin isolated page (see the README); elsewhere generation runs on one

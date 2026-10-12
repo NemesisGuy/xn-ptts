@@ -23,11 +23,27 @@ THREADS_WASM_PACK = RUSTUP_TOOLCHAIN=$(THREADS_TOOLCHAIN) RUSTFLAGS='$(THREADS_R
 	wasm-pack build --target web --no-pack --out-dir pkg/wasm-threads --out-name phonon_tts --release \
 	-- --features threads,$(FEATURES) -Z build-std=std,panic_abort
 
-# The `phonon-tts` npm package, ready to publish from pkg/: both builds, and the JS around them.
+# Both builds again without Relaxed SIMD, for browsers that lack it: Safari, and so every
+# browser on iOS. RUSTFLAGS replaces the config's flags, which is what drops it. pack.mjs
+# keeps only their .wasm, beside the Relaxed one, as phonon_tts_simd_bg.wasm.
+SIMD_RUSTFLAGS = -C target-feature=+simd128 --cfg getrandom_backend="wasm_js"
+SIMD_WASM_PACK = RUSTFLAGS='$(SIMD_RUSTFLAGS)' CARGO_TARGET_DIR=../target/wasm-simd \
+	wasm-pack build --target web --no-pack --out-dir pkg/wasm-simd --out-name phonon_tts --release \
+	-- --features $(FEATURES)
+THREADS_SIMD_WASM_PACK = RUSTUP_TOOLCHAIN=$(THREADS_TOOLCHAIN) \
+	RUSTFLAGS='$(subst +relaxed-simd,-relaxed-simd,$(THREADS_RUSTFLAGS))' \
+	CARGO_TARGET_DIR=../target/wasm-threads-simd \
+	wasm-pack build --target web --no-pack --out-dir pkg/wasm-threads-simd --out-name phonon_tts --release \
+	-- --features threads,$(FEATURES) -Z build-std=std,panic_abort
+
+# The `phonon-tts` npm package, ready to publish from pkg/: both builds, each with and without
+# Relaxed SIMD, and the JS around them.
 build: check-wasm-opt check-threads-toolchain
 	rm -rf pkg
 	wasm-pack build $(WASM_PACK_ARGS) --release -- --features $(FEATURES)
 	$(THREADS_WASM_PACK)
+	$(SIMD_WASM_PACK)
+	$(THREADS_SIMD_WASM_PACK)
 	node scripts/pack.mjs pkg
 
 # Same, without wasm-opt, keeping names for the browser profiler. Single-threaded build only.
