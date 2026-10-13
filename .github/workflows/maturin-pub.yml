@@ -16,10 +16,11 @@
 #   - every job deletes `.cargo/config.toml` first, and sets `RUSTFLAGS` itself. That file
 #     pins `target-cpu=native`, which in a published wheel means "whatever CPU the runner
 #     happened to have" -- a wheel that faults with SIGILL on someone's older machine.
-#   - macOS builds with its fast paths on: `accelerate` and `metal` everywhere, and `kai` on
-#     Apple silicon (Arm's KleidiAI kernels for q8, a no-op on chips without SME2). The
-#     platform most likely to be someone's first impression was otherwise getting the slowest
-#     build we ship. A check fails the job if the KleidiAI kernels quietly did not compile.
+#   - macOS builds with its fast paths on: `accelerate` everywhere, and `kai` and `metal` on
+#     Apple silicon (Arm's KleidiAI kernels for q8, a no-op on chips without SME2; Metal for
+#     f32 weights, which `device=None` then picks). The platform most likely to be someone's
+#     first impression was otherwise getting the slowest build we ship. A check fails the job
+#     if the KleidiAI kernels quietly did not compile.
 #   - the `test-wheel` step, which installs the wheel the job just built and runs pytest.
 #
 # `xn` picks its quantized SIMD kernels with `cfg!(target_feature = "avx")`, at compile time,
@@ -165,7 +166,7 @@ jobs:
           - { runner: macos-14, target: aarch64, rustflags: -C target-cpu=apple-m1, features: 'accelerate,kai,metal' }
           # `-avx,-avx2` is what `.cargo/config.toml` sets for this target; see the note in
           # CLAUDE.md about benchmarking macOS x86_64.
-          - { runner: macos-15-intel, target: x86_64, rustflags: -C target-feature=-avx,-avx2, features: 'accelerate,metal' }
+          - { runner: macos-15-intel, target: x86_64, rustflags: -C target-feature=-avx,-avx2, features: 'accelerate' }
     steps:
       - uses: actions/checkout@v7
       - name: Remove the local cargo config
@@ -173,21 +174,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      # KleidiAI's build script turns the feature off with only a warning when the C toolchain
-      # cannot assemble its SME2 kernels. A release must not lose them quietly.
-      - name: Check that the KleidiAI kernels build
-        if: contains(matrix.platform.features, 'kai')
-        shell: bash
-        env:
-          RUSTFLAGS: ${{ matrix.platform.rustflags }}
-        run: |
-          set -euo pipefail
-          out=$(cargo check -p ptts-pyo3 --features kai 2>&1) || { echo "$out"; exit 1; }
-          if grep -q "the KleidiAI kernels did not build" <<<"$out"; then
-            echo "$out" | grep -A3 "KleidiAI"
-            echo "::error::the KleidiAI kernels did not build with this toolchain"
-            exit 1
-          fi
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
@@ -196,6 +182,19 @@ jobs:
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
         env:
           RUSTFLAGS: ${{ matrix.platform.rustflags }}
+      # xn's build script prints `cargo:rustc-cfg=xn_kai` only when the KleidiAI kernels compiled.
+      # A toolchain too old for them turns the feature off with a warning, which cargo hides for a
+      # crates.io dependency, so check the recorded output of the build that ships instead.
+      - name: Check that the KleidiAI kernels are in the build
+        if: contains(matrix.platform.features, 'kai')
+        shell: bash
+        run: |
+          set -euo pipefail
+          outputs=$(find target -path '*/release/build/xn-*/output')
+          if [ -z "$outputs" ] || ! grep -qs "cargo:rustc-cfg=xn_kai" $outputs; then
+            echo "::error::the KleidiAI kernels did not build with this toolchain"
+            exit 1
+          fi
       - uses: ./.github/actions/test-wheel
       - uses: actions/upload-artifact@v7
         with:
