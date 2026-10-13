@@ -86,9 +86,7 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 
 ## Voices
 
-Each checkpoint comes with its own voices. You can also pick a voice from Gradium's catalog, design one from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio.
-
-A voice file works with one checkpoint only, so pass the model you will speak with as `--model`:
+Each checkpoint comes with its own voices. You can also pick a voice from Gradium's catalog, design one from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio. The voice files work with every Phonon checkpoint.
 
 ```sh
 export GRADIUM_API_KEY=...
@@ -97,10 +95,10 @@ export GRADIUM_API_KEY=...
 uv run scripts/download-voice.py --list
 
 # Download a voice by ID: from the catalog, or one you designed or cloned
-uv run scripts/download-voice.py VOICE_ID --model hf://OWNER/MODEL -o voice.safetensors
+uv run scripts/download-voice.py VOICE_ID -o voice.safetensors
 
 # Clone a voice from a recording; 10 seconds of clear speech are used
-uv run scripts/clone-voice.py speaker.wav --lang en --model hf://OWNER/MODEL -o voice.safetensors
+uv run scripts/clone-voice.py speaker.wav --lang en -o voice.safetensors
 
 ptts --model hf://OWNER/MODEL --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
 ```
