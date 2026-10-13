@@ -36,7 +36,7 @@ The first run downloads the default model and caches it. To run the runtime prev
 
 ## What you get
 
-- **Small enough to ship:** Choose a 40M or 90M parameter model. Both can ship inside a mobile app or load in a browser tab.
+- **Small enough to ship:** Choose a 31M, 56M or 98M parameter model. Each can ship inside a mobile app or load in a browser tab.
 - **Five languages in one model:** Speak English, French, German, Spanish, and Portuguese, with more languages planned.
 - **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
 - **Voices ready to use or make your own:** Choose from ready-to-use voices, or explore voice design and cloning in [Gradium Studio](https://studio.gradium.ai/).
@@ -44,7 +44,22 @@ The first run downloads the default model and caches it. To run the runtime prev
 
 ## Performance
 
-<!-- Performance measurements and methodology will go here. -->
+Three model sizes, one inference stack. Each cell is how many seconds of audio Phonon makes per
+second of compute (higher is faster; above 1× is faster than real time) and the time to first
+byte (TTFB).
+
+| Device | 31M | 56M | 98M |
+|---|---|---|---|
+| MacBook Air M5, CPU, 1 core | 26× · 5 ms | 22× · 6 ms | 17× · 11 ms |
+| MacBook Air M5, Metal GPU | 29× · 4 ms | 25× · 5 ms | 20× · 10 ms |
+| iPhone 16 Pro, Neural Engine | 22× · 9 ms | 19× · 13 ms | 15× · 17 ms |
+| Raspberry Pi 5, CPU, 1 core | 2.3× · 68 ms | 2.2× · 92 ms | 1.8× · 191 ms |
+
+- Every size runs faster than real time on a single CPU core, from a MacBook to a Raspberry Pi 5.
+- TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
+  for the whole sentence.
+- On one MacBook Air core, the 56M model runs at 22× real time with a 6 ms TTFB. Kokoro's own
+  PyTorch runtime on the same core runs at 7.3× with a 776 ms TTFB.
 
 ## Choose an integration
 
