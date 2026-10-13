@@ -17,9 +17,9 @@ const AUDIO_QUEUE: usize = 4;
 const REQUEST_QUEUE: usize = 16;
 const MAX_INPUT_CHARS: usize = 4096;
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
-const SEND_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const SEND_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long a session may wait for its next message before it is closed and its slot freed.
-const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+pub(crate) const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub async fn ws_handler(
     State(app): State<AppState>,
@@ -72,7 +72,7 @@ async fn serve(socket: WebSocket, app: AppState) -> Result<()> {
     outcome.and(forwarded)
 }
 
-async fn read_requests<S, E>(
+pub(crate) async fn read_requests<S, E>(
     mut socket: S,
     requests: mpsc::Sender<Message>,
     cancel: watch::Sender<bool>,
@@ -96,7 +96,7 @@ async fn read_requests<S, E>(
     let _ = cancel.send(true);
 }
 
-async fn cancelled(cancel: &mut watch::Receiver<bool>) {
+pub(crate) async fn cancelled(cancel: &mut watch::Receiver<bool>) {
     while !*cancel.borrow_and_update() {
         if cancel.changed().await.is_err() {
             return;
@@ -104,9 +104,9 @@ async fn cancelled(cancel: &mut watch::Receiver<bool>) {
     }
 }
 
-async fn forward_replies<S>(
+pub(crate) async fn forward_replies<S, R: serde::Serialize>(
     mut socket: S,
-    mut replies: mpsc::Receiver<TtsReply>,
+    mut replies: mpsc::Receiver<R>,
     mut cancel: watch::Receiver<bool>,
     timeout: Duration,
 ) -> Result<()>

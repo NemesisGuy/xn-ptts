@@ -70,3 +70,69 @@ pub mod error_codes {
     pub const INTERNAL: u32 = 500;
     pub const NOT_IMPLEMENTED: u32 = 501;
 }
+
+/// Client messages of the speech-recognition route (`/speech/asr`).
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SttRequest {
+    Setup {
+        #[serde(default)]
+        model_name: String,
+        /// Only `pcm` (s16le mono at the `sample_rate` of `ready`) is accepted.
+        #[serde(default = "default_input_format")]
+        input_format: String,
+        /// A JSON object as a string; `language` pins the spoken language.
+        #[serde(default)]
+        json_config: Option<String>,
+    },
+    Audio {
+        /// Base64 of the raw audio bytes.
+        audio: String,
+    },
+    EndOfStream,
+}
+
+fn default_input_format() -> String {
+    "pcm".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct VadPrediction {
+    pub horizon_s: f64,
+    pub inactivity_prob: f64,
+}
+
+/// Server messages of the speech-recognition route (`/speech/asr`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SttReply {
+    Ready {
+        model_name: String,
+        sample_rate: u32,
+        frame_size: u32,
+        delay_in_frames: f64,
+        text_stream_names: Vec<String>,
+        request_id: String,
+    },
+    /// Voice activity, once per 80 ms frame.
+    Step {
+        step_idx: u64,
+        step_duration_s: f64,
+        total_duration_s: f64,
+        vad: Vec<VadPrediction>,
+    },
+    Text {
+        text: String,
+        start_s: f64,
+        stream_id: u32,
+    },
+    EndText {
+        stop_s: f64,
+        stream_id: u32,
+    },
+    Error {
+        code: u32,
+        message: String,
+    },
+    EndOfStream,
+}

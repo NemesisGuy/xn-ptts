@@ -1,3 +1,5 @@
+mod asr;
+mod asr_handler;
 mod encoder;
 mod handler;
 mod model;
@@ -74,6 +76,32 @@ struct Args {
     /// not set take their defaults.
     #[arg(long = "condition", value_name = "NAME=VALUE")]
     conditions: Vec<String>,
+
+    /// Speech-recognition checkpoint to serve at `/speech/asr`: a local folder (or its
+    /// config.json) or a Hugging Face repo ID, holding config.json, model.safetensors,
+    /// mimi.safetensors and tokenizer.json. Without it `/speech/asr` answers with an error.
+    #[arg(long)]
+    asr_config: Option<std::path::PathBuf>,
+
+    /// Hugging Face branch, tag, or commit of `--asr-config`.
+    #[arg(long, requires = "asr_config")]
+    asr_revision: Option<String>,
+
+    /// A tokenizer.json for the ASR checkpoint, when it ships only a SentencePiece
+    /// tokenizer.model (convert that with `scripts/convert-tokenizer.py`).
+    #[arg(long, requires = "asr_config")]
+    asr_tokenizer: Option<std::path::PathBuf>,
+
+    /// Quantization of the ASR transformer linears, applied at load time: one of the
+    /// `--quant` values. Unquantized by default; `q8` runs about twice as fast on the CPU.
+    /// The ASR runs on the CPU whatever `--device` is.
+    #[arg(long, requires = "asr_config")]
+    asr_quant: Option<String>,
+
+    /// Maximum open `/speech/asr` sessions, counted separately from `/speech/tts` so an agent
+    /// can hold one of each. Excess connections receive HTTP 429.
+    #[arg(long, default_value = "1", value_parser = parse_request_limit)]
+    asr_max_concurrent_requests: std::num::NonZeroUsize,
 }
 
 fn parse_request_limit(value: &str) -> Result<std::num::NonZeroUsize, String> {
@@ -108,14 +136,19 @@ async fn main() -> Result<()> {
     // The weight loading that follows is CPU-bound and blocks the runtime
     // thread, which is fine here: nothing is served until it is done.
     let app_state = build_app_state(&args).await?;
+    let asr_state = build_asr_state(&args).await?;
+    let routes = if asr_state.0.is_some() { "/speech/tts, /speech/asr" } else { "/speech/tts" };
 
     let app = Router::new()
         .route("/speech/tts", any(handler::ws_handler))
         .with_state(app_state)
+        .merge(
+            Router::new().route("/speech/asr", any(asr_handler::ws_handler)).with_state(asr_state),
+        )
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&args.addr).await?;
-    tracing::info!(addr = %args.addr, "listening on /speech/tts");
+    tracing::info!(addr = %args.addr, "listening on {routes}");
     axum::serve(listener, app)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -152,6 +185,22 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
         normalize,
         &conditions,
         args.max_concurrent_requests,
+    )
+    .await
+}
+
+async fn build_asr_state(args: &Args) -> Result<asr::AsrApp> {
+    let Some(source) = &args.asr_config else { return Ok(asr::AsrApp(None)) };
+    let quant = match args.asr_quant.as_deref() {
+        None => Quant::F32,
+        Some(name) => name.parse::<Quant>()?,
+    };
+    asr::load_asr(
+        source,
+        args.asr_revision.as_deref(),
+        args.asr_tokenizer.as_deref(),
+        quant,
+        args.asr_max_concurrent_requests,
     )
     .await
 }
