@@ -24,8 +24,6 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 
 > **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
 
-The browser runs synthesis on your device; it downloads model files on first use.
-
 ## Try it
 
 With [uv](https://docs.astral.sh/uv/), one line writes a WAV:
@@ -34,7 +32,7 @@ With [uv](https://docs.astral.sh/uv/), one line writes a WAV:
 uvx ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
-The first run downloads the default model and caches it. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) to use another model.
+The first run downloads the default model and caches it. To run the runtime preview now, use `uvx --prerelease allow ptts`. See [Model setup](#model-setup) to use another model.
 
 ## What you get
 
@@ -50,7 +48,7 @@ The first run downloads the default model and caches it. Like the other unversio
 
 ## Choose an integration
 
-Each goal links to its quickstart below. Packages are available as a runtime preview; see the note at the top.
+Each goal links to its quickstart below.
 
 | You want to… | Package | Get it | Details |
 |---|---|---|---|
@@ -98,14 +96,14 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 
 ## Quickstart
 
-These examples use the published runtime preview and the default model. Install the preview using the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1), or follow the [source setup](docs/development.md). The unversioned `uvx` and registry commands target the upcoming stable release.
+These examples use the default model. The install commands below target the upcoming stable release; to install the runtime preview now, follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) or the [source setup](docs/development.md).
 
 ### Command line
 
 <details>
 <summary>Show command line quickstart</summary>
 
-After the stable release, [uv](https://docs.astral.sh/uv/) can run the Python command in an isolated environment. For the current preview, use the command in the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1):
+[uv](https://docs.astral.sh/uv/) can run the Python command in an isolated environment:
 
 ```sh
 uvx ptts --lang en "Hello from Phonon." -o speech.wav
@@ -127,7 +125,7 @@ ptts --lang en "Hello from Phonon." -o speech.wav
 
 The output is a mono 24 kHz WAV. Open it in your audio player.
 
-If you prefer Cargo, install the command with `cargo install ptts --locked --features cli` after the matching stable release is published.
+If you prefer Cargo, install the command with `cargo install ptts --locked --features cli`.
 
 To use another model, pass a local folder or a Hugging Face repo, and `--quant q8` for faster q8 weights on the CPU:
 
@@ -145,7 +143,7 @@ Use `--voice NAME` to choose a voice; omitting it uses the model's default selec
 <details>
 <summary>Show Python quickstart</summary>
 
-For the stable release, install the Python package into your environment. Current preview users should follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1):
+Install the Python package into your environment:
 
 ```sh
 python -m pip install ptts
@@ -186,7 +184,7 @@ Rust and Python both install a command named `ptts`, with different flags. `pyth
 <details>
 <summary>Show browser quickstart</summary>
 
-For the stable release, install the browser package into your web app. Current preview users should follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1):
+Install the browser package into your web app:
 
 ```sh
 npm install phonon-tts
@@ -205,7 +203,7 @@ const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 
 Use the returned `Blob` for a download link or your audio player. `tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the [browser guide](ptts-wasm/js/README.md#streaming) includes a complete Web Audio example. Call `tts.dispose()` when finished with the model.
 
-The first load downloads and caches the files. `onProgress` reports download progress. Serve over HTTPS or localhost for caching, and use a browser with WebAssembly SIMD. CPU is the default. Threading and WebGPU setup are covered in the [browser guide →](ptts-wasm/js/README.md).
+The first load downloads and caches the files. `onProgress` reports download progress. Serve over HTTPS or localhost for caching, and use a browser with WebAssembly SIMD. The package runs in browsers, not Node.js. CPU is the default. Threading and WebGPU setup are covered in the [browser guide →](ptts-wasm/js/README.md).
 
 </details>
 
@@ -240,7 +238,7 @@ Keep `tts` and `player` in your app's state while audio plays. You can also down
 <details>
 <summary>Show Android integration options</summary>
 
-**Snapdragon NPU:** The [QNN Android preview](qnn/android/README.md) provides a Kotlin API and an AAR around the optimized QNN engine. It requires Android 12+, ARM64, working QNN HTP support and a model bundle compiled for the phone's SoC. Build the AAR from this repository using its build guide. The planned Maven package is `ai.gradium:ptts`; it is not published yet.
+**Snapdragon NPU:** The [QNN Android preview](qnn/android/README.md) provides a Kotlin API and an AAR around the optimized QNN engine. It requires Android 12+, ARM64, working QNN HTP support and a model bundle compiled for the phone's SoC. There is no automatic CPU fallback. Build the AAR from this repository using its build guide. The planned Maven package is `ai.gradium:ptts`; it is not published yet.
 
 Load a supplied compiled model folder on a worker thread and stream audio to your player:
 
@@ -302,7 +300,7 @@ For a download cache that survives container replacement, use the [Hub Compose f
 <details>
 <summary>Show Rust quickstart</summary>
 
-Add `ptts` with tokenizer support to your Rust project. This command targets the upcoming stable release; preview installation is in the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1), and source development can use a [path dependency](docs/development.md#rust):
+Add `ptts` with tokenizer support to your Rust project, or use a [path dependency](docs/development.md#rust) to develop from source:
 
 ```sh
 cargo add ptts --features hf,hub
@@ -330,24 +328,10 @@ Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chu
 
 ## Guides
 
-| Topic | Guide |
-|---|---|
-| Desktop downloads, Homebrew, CPU requirements, CLI flags | [Command line](docs/cli.md) |
-| Python installation, voices, streaming, and wheels | [Python](ptts-pyo3/README.md) |
-| Browser playback, download progress, caching, threads, and WebGPU | [Browser](ptts-wasm/js/README.md) |
-| Apple installation, model bundles, playback, and cancellation | [Swift](ios/PhononTTS/README.md) |
-| Android CPU library, Kotlin, NDK, and playback | [Android](android/README.md) |
-| Android Snapdragon NPU AAR, Kotlin API, and compiled bundles | [QNN Android](qnn/android/README.md) |
-| Docker, OpenAI-compatible clients, Home Assistant, and deployment | [HTTP server](ptts-openai-server/README.md) |
-| Streaming text and audio over one connection | [WebSocket server](ptts-ws-server/README.md) |
-| Rust library and the `say` example | [Rust](ptts/README.md) |
-| Build packages, run the local demo, and develop from source | [Development](docs/development.md) |
+Each integration's guide is linked from its row in [Choose an integration](#choose-an-integration) and from its quickstart. Two more:
 
-### Platform notes
-
-Native desktop packages cover the targets listed in the [CLI guide](docs/cli.md). Apple apps use Core ML. Android apps can use the CPU library or the QNN AAR preview on supported Snapdragon NPUs. QNN requires a matching compiled bundle and has no automatic CPU fallback. Browser apps use Wasm on CPU by default. Browser WebGPU is opt in. The npm package targets browsers, not native Node.js inference.
-
-Performance and memory use depend on the checkpoint and device.
+- [WebSocket server](ptts-ws-server/README.md): streaming text and audio over one connection.
+- [Development](docs/development.md): build packages, run the local demo, and develop from source.
 
 ### Questions and feedback
 
