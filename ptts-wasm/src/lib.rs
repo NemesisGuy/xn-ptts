@@ -23,6 +23,7 @@ use ptts::loader::{load_speaker_proj, load_voice_emb_from_bytes, remap_key};
 use ptts::mimi::MimiDecoderState;
 use ptts::plan::{self, EosPolicy};
 use ptts::preprocess::Normalize;
+use ptts::speed::{TimeStretch, check_speed};
 use ptts::tok::Tok;
 use ptts::transformer::{LayerAttentionState, StreamingMHAState, StreamingTransformerState};
 use ptts::tts_model::{
@@ -165,6 +166,9 @@ struct GenState {
     current: Option<ChunkState>,
     /// One noise source for the whole text, so a seed fixes every chunk.
     rng: NormalRng,
+    /// The speed change, for a speed other than 1. One for the whole text, so chunk
+    /// boundaries do not reset it.
+    stretch: Option<TimeStretch>,
 }
 
 #[wasm_bindgen]
@@ -290,13 +294,17 @@ impl Model {
         text: &str,
         temperature: f32,
         seed: u32,
+        speed: f32,
     ) -> Result<usize> {
         // Dropped before anything else can fail, so a caller that swallows the error cannot
         // go on stepping and quietly resume the *previous* utterance.
         self.gen_state = None;
         // Built here rather than after planning: a temperature that cannot produce a
-        // distribution should be refused before any work is done.
+        // distribution, or a speed out of range, should be refused before any work is done.
         let rng = NormalRng::new(temperature, seed as u64)?;
+        check_speed(speed)?;
+        let stretch =
+            if speed == 1.0 { None } else { Some(TimeStretch::new(self.sample_rate(), speed)?) };
         let Some(voice) = self.voice_states.get(voice_index) else {
             xn::bail!("invalid voice index: {voice_index}")
         };
@@ -311,7 +319,8 @@ impl Model {
         let base = resize_state(voice, seq_budget)?;
 
         let num_chunks = chunks.len();
-        self.gen_state = Some(GenState { base, chunks: chunks.into_iter(), current: None, rng });
+        self.gen_state =
+            Some(GenState { base, chunks: chunks.into_iter(), current: None, rng, stretch });
         Ok(num_chunks)
     }
 
@@ -377,6 +386,15 @@ impl Model {
         let Some(state) = gen_state.current.as_mut() else { return Ok(None) };
         if state.done || state.step >= state.frame_budget {
             gen_state.current = None;
+            // After the last chunk, what the speed change still holds is the final audio.
+            if gen_state.chunks.len() == 0
+                && let Some(stretch) = gen_state.stretch.as_mut()
+            {
+                let tail = stretch.flush();
+                if !tail.is_empty() {
+                    return Ok(Some(js_sys::Float32Array::from(tail.as_slice())));
+                }
+            }
             return Ok(None);
         }
 
@@ -395,7 +413,10 @@ impl Model {
         state.prev_latent = next_latent;
         state.step += 1;
 
-        let pcm = audio_chunk.narrow(0, ..1)?.contiguous()?.to_vec()?;
+        let mut pcm = audio_chunk.narrow(0, ..1)?.contiguous()?.to_vec()?;
+        if let Some(stretch) = gen_state.stretch.as_mut() {
+            pcm = stretch.process(&pcm);
+        }
         Ok(Some(js_sys::Float32Array::from(pcm.as_slice())))
     }
 }
@@ -451,14 +472,18 @@ impl Model {
 
     /// Normalizes `text`, splits it into sentence-aligned chunks and tokenizes them. Returns
     /// the number of chunks. Runs no model: call `next_chunk` to start the first one.
+    ///
+    /// `speed` is how fast to speak, from 0.25 to 4 times the model's natural rate, without
+    /// changing pitch. The audio `generation_step` returns is time-stretched to match.
     pub fn start_generation(
         &mut self,
         voice_index: usize,
         text: &str,
         temperature: f32,
         seed: u32,
+        speed: f32,
     ) -> std::result::Result<usize, JsError> {
-        self.start_generation_(voice_index, text, temperature, seed).map_err(js_err)
+        self.start_generation_(voice_index, text, temperature, seed, speed).map_err(js_err)
     }
 
     /// Prompts the model with the next chunk's text and returns its token count, or
@@ -470,7 +495,10 @@ impl Model {
     }
 
     /// Generates and decodes one frame of the current chunk: 80 ms of mono PCM at
-    /// `sample_rate`. Returns `undefined` when the chunk is finished.
+    /// `sample_rate`, or the same frame time-stretched at a speed other than 1, which can be
+    /// any length including empty. Returns `undefined` when the chunk is finished; at a speed
+    /// other than 1, the end of the last chunk first returns the audio the stretch was still
+    /// holding.
     pub fn generation_step(
         &mut self,
     ) -> std::result::Result<Option<js_sys::Float32Array>, JsError> {

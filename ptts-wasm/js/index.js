@@ -144,14 +144,15 @@ export class PhononTTS {
 
   /**
    * Speak `text`, yielding audio as it is generated: mono `Float32Array`s at `sampleRate`,
-   * 80 ms each. Long text is split at sentence boundaries and spoken chunk by chunk.
+   * 80 ms each at normal speed. Long text is split at sentence boundaries and spoken chunk by
+   * chunk.
    *
    * @param {string} text
    * @param {import('./index.js').SpeechOptions} [options]
    * @returns {import('./index.js').SpeechStream}
    */
   stream(text, options = {}) {
-    const { voice = this.#defaultVoice, temperature = 0.3, seed = 42, signal } = options;
+    const { voice = this.#defaultVoice, temperature = 0.3, seed = 42, speed = 1, signal } = options;
     const id = this.#nextId++;
     // Chunks the consumer has not taken yet, and the consumer waiting for the next one.
     const buffered = [];
@@ -207,7 +208,7 @@ export class PhononTTS {
         if (finished || this.#disposed) return finish(this.#disposed ? this.#endError() : null, { cancelled: true });
         started = true;
         this.#pending.set(id, handlers);
-        this.#worker.postMessage({ type: 'generate', id, text, voice, temperature, seed });
+        this.#worker.postMessage({ type: 'generate', id, text, voice, temperature, seed, speed });
       });
     this.#queue = this.#queue.then(run, run);
 

@@ -17,6 +17,9 @@ pub enum TtsRequest {
         voice: Option<String>,
         voice_id: Option<String>,
         voice_emb: Option<String>,
+        /// How fast to speak, from 0.25 to 4 times the model's natural rate, without changing
+        /// pitch. 1 when absent.
+        speed: Option<f32>,
     },
     Text {
         text: String,

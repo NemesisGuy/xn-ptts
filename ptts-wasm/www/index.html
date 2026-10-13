@@ -29,6 +29,7 @@
   .slider-section label { display: block; font-weight: 600; margin-bottom: 6px; color: #ccc; }
   .slider-section input[type="range"] { width: 120px; vertical-align: middle; }
   .slider-section .slider-value { color: #aaa; font-size: 14px; margin-left: 4px; }
+  .slider-section + .slider-section { margin-left: 16px; }
 </style>
 </head>
 <body>
@@ -58,6 +59,10 @@
     <label for="temperature">Temperature <span id="temp-value" class="slider-value">0.3</span></label>
     <input type="range" id="temperature" min="0.1" max="1.0" step="0.1" value="0.3">
   </div>
+  <div class="slider-section">
+    <label for="speed">Speed <span id="speed-value" class="slider-value">1.0×</span></label>
+    <input type="range" id="speed" min="0.5" max="2.0" step="0.1" value="1.0">
+  </div>
 </div>
 
 <div class="progress-bar" id="progress-bar" style="display:none"><div class="fill" id="progress-fill"></div></div>
@@ -80,6 +85,12 @@ const tempValue = document.getElementById('temp-value');
 
 tempSlider.addEventListener('input', () => {
   tempValue.textContent = tempSlider.value;
+});
+
+const speedSlider = document.getElementById('speed');
+const speedValue = document.getElementById('speed-value');
+speedSlider.addEventListener('input', () => {
+  speedValue.textContent = `${parseFloat(speedSlider.value).toFixed(1)}×`;
 });
 
 const QUANT_SIZE_MB = { f32: 240, q8: 146 };
@@ -270,6 +281,7 @@ async function generate() {
   const speech = tts.stream(text, {
     voice: voiceSelect.value,
     temperature: parseFloat(tempSlider.value),
+    speed: parseFloat(speedSlider.value),
   });
   let nextStartTime = 0;
   try {

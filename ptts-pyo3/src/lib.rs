@@ -210,7 +210,7 @@ struct Tts {
 
 #[pymethods]
 impl Tts {
-    /// `TTS(*, lang, config=None, device=None, quant=None, voice=None, temperature=0.3, seed=..., cfg_coef=None, eos_threshold=None)`
+    /// `TTS(*, lang, config=None, device=None, quant=None, voice=None, temperature=0.3, seed=..., cfg_coef=None, eos_threshold=None, speed=1.0)`
     ///
     /// `lang` is required and keyword-only: the language text is normalized as
     /// before it is tokenized, one of `"en"`, `"fr"`, `"de"`, `"es"` or
@@ -218,6 +218,10 @@ impl Tts {
     /// forms of `@`, `+` and `=` differ per language, so there is nothing safe
     /// to default to. `lang="none"` or `lang=None` hands text to the tokenizer
     /// as written, for callers that normalize it themselves.
+    ///
+    /// `speed` is how fast to speak, from 0.25 to 4 times the model's natural
+    /// rate, without changing pitch: the audio is time-stretched after it is
+    /// generated. Every call can override it.
     #[new]
     #[pyo3(signature = (
         config = None,
@@ -230,6 +234,7 @@ impl Tts {
         eos_threshold = None,
         *,
         lang,
+        speed = 1.0,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -243,6 +248,7 @@ impl Tts {
         cfg_coef: Option<f32>,
         eos_threshold: Option<f32>,
         lang: Option<&str>,
+        speed: f32,
     ) -> PyResult<Self> {
         // `None` opts out as well as `"none"`: `lang` has to be passed, but a
         // caller forwarding a config value should not have to special-case the
@@ -259,9 +265,10 @@ impl Tts {
             None => Quant::F32,
             Some(name) => Quant::parse(name).py()?,
         };
-        // Both checks happen before resolve() downloads anything; `SynthBuilder`
+        // These checks happen before resolve() downloads anything; `SynthBuilder`
         // would catch them, but only once the checkpoint is on disk.
         quant.check_device(device).py()?;
+        ptts::speed::check_speed(speed).py()?;
         let unavailable = match device {
             DeviceKind::Cuda if !cfg!(feature = "cuda") => Some("cuda"),
             DeviceKind::Vulkan if !cfg!(feature = "vulkan") => Some("vulkan"),
@@ -282,7 +289,8 @@ impl Tts {
                 .device(device)
                 .quant(quant)
                 .temperature(temperature)
-                .seed(seed);
+                .seed(seed)
+                .speed(speed);
             if let Some(cfg_coef) = cfg_coef {
                 builder = builder.cfg_coef(cfg_coef);
             }
@@ -347,7 +355,8 @@ impl Tts {
     }
 
     /// Synthesize `text` and return the waveform as a 1-D float32 array.
-    #[pyo3(signature = (text, *, voice=None, temperature=None, seed=None, cfg_coef=None))]
+    #[pyo3(signature = (text, *, voice=None, temperature=None, seed=None, cfg_coef=None, speed=None))]
+    #[allow(clippy::too_many_arguments)]
     fn synth<'py>(
         &self,
         py: Python<'py>,
@@ -356,8 +365,9 @@ impl Tts {
         temperature: Option<f32>,
         seed: Option<u64>,
         cfg_coef: Option<f32>,
+        speed: Option<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let opts = self.opts(voice, temperature, seed, cfg_coef);
+        let opts = self.opts(voice, temperature, seed, cfg_coef, speed);
         let stream = self.start(py, text, &opts)?;
         let pcm = drain(py, stream)?;
         Ok(PyArray1::from_vec(py, pcm))
@@ -365,7 +375,7 @@ impl Tts {
 
     /// Synthesize `text` straight to a mono 16-bit WAV file, returning its
     /// duration in seconds.
-    #[pyo3(signature = (path, text, *, voice=None, temperature=None, seed=None, cfg_coef=None))]
+    #[pyo3(signature = (path, text, *, voice=None, temperature=None, seed=None, cfg_coef=None, speed=None))]
     #[allow(clippy::too_many_arguments)]
     fn save(
         &self,
@@ -376,8 +386,9 @@ impl Tts {
         temperature: Option<f32>,
         seed: Option<u64>,
         cfg_coef: Option<f32>,
+        speed: Option<f32>,
     ) -> PyResult<f64> {
-        let opts = self.opts(voice, temperature, seed, cfg_coef);
+        let opts = self.opts(voice, temperature, seed, cfg_coef, speed);
         let stream = self.start(py, text, &opts)?;
         let sample_rate = stream.sample_rate();
         let pcm = drain(py, stream)?;
@@ -389,7 +400,8 @@ impl Tts {
     /// Synthesize `text`, yielding float32 chunks as the decoder produces them.
     ///
     /// The returned object is an iterator; dropping it stops the generation.
-    #[pyo3(signature = (text, *, voice=None, temperature=None, seed=None, cfg_coef=None))]
+    #[pyo3(signature = (text, *, voice=None, temperature=None, seed=None, cfg_coef=None, speed=None))]
+    #[allow(clippy::too_many_arguments)]
     fn stream(
         &self,
         py: Python<'_>,
@@ -398,8 +410,9 @@ impl Tts {
         temperature: Option<f32>,
         seed: Option<u64>,
         cfg_coef: Option<f32>,
+        speed: Option<f32>,
     ) -> PyResult<AudioStream> {
-        let opts = self.opts(voice, temperature, seed, cfg_coef);
+        let opts = self.opts(voice, temperature, seed, cfg_coef, speed);
         let stream = self.start(py, text, &opts)?;
         Ok(AudioStream { inner: Mutex::new(Some(stream)) })
     }
@@ -467,6 +480,7 @@ impl Tts {
         temperature: Option<f32>,
         seed: Option<u64>,
         cfg_coef: Option<f32>,
+        speed: Option<f32>,
     ) -> SpeechOptions {
         SpeechOptions {
             voice: voice.or_else(|| self.default_voice.clone()),
@@ -474,6 +488,7 @@ impl Tts {
             seed,
             cfg_coef,
             max_tokens_per_chunk: None,
+            speed,
         }
     }
 

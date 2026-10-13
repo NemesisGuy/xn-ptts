@@ -48,6 +48,10 @@
 //! A server answering many requests for one voice wants [`Synth::session`],
 //! which conditions on the voice prompt once instead of per request.
 //!
+//! [`SpeechOptions::speed`] speaks faster or slower without changing the
+//! voice's pitch. It is applied to the audio after it is generated, by
+//! [`crate::speed::TimeStretch`], so the model's output is unchanged.
+//!
 //! Text is normalized before it is tokenized — see [`crate::preprocess`]. Which
 //! language, or [`Normalize::Off`], is a required argument to
 //! [`SynthBuilder::new`]: the model reads normalized text noticeably better,
@@ -64,6 +68,7 @@ use crate::flow_lm::NormalRng;
 use crate::loader;
 use crate::plan::{self, EosPolicy};
 use crate::preprocess::Normalize;
+use crate::speed::{TimeStretch, check_speed};
 use crate::tts_model::{
     MAX_TOKENS_PER_CHUNK, MimiEnc, TTSConfig, TTSModel, TTSState, prepare_text_prompt,
     split_into_best_sentences,
@@ -201,6 +206,10 @@ pub struct SpeechOptions {
     /// Classifier-free guidance coefficient. `1.0` and `None` both disable it.
     pub cfg_coef: Option<f32>,
     pub max_tokens_per_chunk: Option<usize>,
+    /// How fast to speak, as a multiple of the model's natural rate, between
+    /// [`crate::speed::MIN_SPEED`] and [`crate::speed::MAX_SPEED`]. The pitch
+    /// stays the same.
+    pub speed: Option<f32>,
 }
 
 impl SpeechOptions {
@@ -228,6 +237,11 @@ impl SpeechOptions {
         self.max_tokens_per_chunk = Some(max_tokens);
         self
     }
+
+    pub fn speed(mut self, speed: f32) -> Self {
+        self.speed = Some(speed);
+        self
+    }
 }
 
 /// Defaults applied to every request unless overridden per call.
@@ -238,6 +252,7 @@ struct Defaults {
     seed: u64,
     cfg_coef: Option<f32>,
     max_tokens_per_chunk: usize,
+    speed: f32,
 }
 
 /// Merge per-request overrides onto the settings a [`SynthBuilder`] was given.
@@ -259,6 +274,10 @@ fn resolve(defaults: &Defaults, opts: &SpeechOptions) -> Result<Defaults> {
             "temperature must be >= 0, got {temperature}"
         )));
     }
+    // Checked here for the same reason: it is otherwise first used once the
+    // stream is running, too late to refuse the request.
+    let speed = opts.speed.unwrap_or(defaults.speed);
+    check_speed(speed)?;
     Ok(Defaults {
         voice: opts.voice.clone().or_else(|| defaults.voice.clone()),
         temperature,
@@ -268,6 +287,7 @@ fn resolve(defaults: &Defaults, opts: &SpeechOptions) -> Result<Defaults> {
             _ => None,
         },
         max_tokens_per_chunk: opts.max_tokens_per_chunk.unwrap_or(defaults.max_tokens_per_chunk),
+        speed,
     })
 }
 
@@ -480,6 +500,7 @@ impl<Q: BackendQ> SynthOf<Q> {
             temperature: settings.temperature,
             seed: settings.seed,
             max_tokens_per_chunk: settings.max_tokens_per_chunk,
+            speed: settings.speed,
             base,
             cfg_base,
             seq_budget,
@@ -673,6 +694,8 @@ pub struct SessionOf<Q: BackendQ> {
     temperature: f32,
     seed: u64,
     max_tokens_per_chunk: usize,
+    /// Applied to every stream this session starts. See [`SpeechStream::set_speed`].
+    speed: f32,
     base: TTSState<Q>,
     cfg_base: Option<(f32, TTSState<Q>)>,
     seq_budget: usize,
@@ -897,12 +920,15 @@ impl<Q: BackendQ> SessionOf<Q> {
             }
         });
 
-        Ok(SpeechStream {
+        let mut stream = SpeechStream {
             rx: Some(pcm_rx),
             sample_rate: self.sample_rate(),
             failed: false,
             workers: Some([backbone_handle, decode_handle]),
-        })
+            stretch: None,
+        };
+        stream.set_speed(self.speed)?;
+        Ok(stream)
     }
 }
 
@@ -1003,8 +1029,9 @@ fn run_backbone<Q: BackendQ>(
 ///
 /// Each item is mono `f32` samples at [`Self::sample_rate`] — one Mimi frame's
 /// worth, or several when the decoder finds more than one frame already queued
-/// and decodes them together. The iterator ends when generation finishes; an
-/// `Err` item is terminal.
+/// and decodes them together. At a speed other than 1 the sizes vary instead,
+/// and the last chunk is what the speed change was still holding. The iterator
+/// ends when generation finishes; an `Err` item is terminal.
 pub struct SpeechStream {
     /// `Option` so [`Drop`] can release it *before* joining: the channel is
     /// unbounded, so a worker only notices it should stop once the receiver is
@@ -1015,35 +1042,34 @@ pub struct SpeechStream {
     /// The flow-LM and decoder threads, joined once the channel closes so that
     /// a panic in either surfaces as an error rather than as truncated audio.
     workers: Option<[std::thread::JoinHandle<()>; 2]>,
+    /// The speed change, from the first [`Self::set_speed`] away from 1 on.
+    /// Kept after a change back to 1, since it may still hold audio.
+    stretch: Option<TimeStretch>,
 }
 
 impl SpeechStream {
     pub fn sample_rate(&self) -> usize {
         self.sample_rate
     }
-}
 
-/// Joining on drop is what makes a session's in-flight flag exact: dropping the
-/// receiver closes the channels, the workers stop, and only once they have
-/// stopped writing does the flag clear. Without it, "drop the stream, start the
-/// next one" could still be refused.
-impl Drop for SpeechStream {
-    fn drop(&mut self) {
-        // Releasing the receiver first is what stops the workers; joining
-        // before that would wait for the whole generation.
-        self.rx.take();
-        if let Some(workers) = self.workers.take() {
-            for worker in workers {
-                let _ = worker.join();
+    /// Speak faster or slower from the next chunk on, without changing pitch.
+    ///
+    /// Streams start at the speed their request or session was given, so this
+    /// is for changing it mid-stream, or per request on a [`Session`]. Audio the
+    /// speed change already holds keeps the speed it arrived at.
+    pub fn set_speed(&mut self, speed: f32) -> Result<()> {
+        match self.stretch.as_mut() {
+            Some(stretch) => stretch.set_speed(speed),
+            None if speed == 1.0 => Ok(()),
+            None => {
+                self.stretch = Some(TimeStretch::new(self.sample_rate, speed)?);
+                Ok(())
             }
         }
     }
-}
 
-impl Iterator for SpeechStream {
-    type Item = Result<Vec<f32>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    /// The next chunk as the decoder produced it, before any speed change.
+    fn recv(&mut self) -> Option<Result<Vec<f32>>> {
         if self.failed {
             return None;
         }
@@ -1071,6 +1097,51 @@ impl Iterator for SpeechStream {
     }
 }
 
+/// Joining on drop is what makes a session's in-flight flag exact: dropping the
+/// receiver closes the channels, the workers stop, and only once they have
+/// stopped writing does the flag clear. Without it, "drop the stream, start the
+/// next one" could still be refused.
+impl Drop for SpeechStream {
+    fn drop(&mut self) {
+        // Releasing the receiver first is what stops the workers; joining
+        // before that would wait for the whole generation.
+        self.rx.take();
+        if let Some(workers) = self.workers.take() {
+            for worker in workers {
+                let _ = worker.join();
+            }
+        }
+    }
+}
+
+impl Iterator for SpeechStream {
+    type Item = Result<Vec<f32>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let item = self.recv();
+            let Some(stretch) = self.stretch.as_mut() else { return item };
+            match item {
+                // A chunk can come out empty while the speed change gathers
+                // enough audio for its next splice; nobody wants to be handed that.
+                Some(Ok(pcm)) => {
+                    let pcm = stretch.process(&pcm);
+                    if !pcm.is_empty() {
+                        return Some(Ok(pcm));
+                    }
+                }
+                // The end of the audio. What the speed change still holds is the
+                // last chunk, and `recv` keeps returning `None` after it.
+                None => {
+                    let tail = stretch.flush();
+                    return (!tail.is_empty()).then_some(Ok(tail));
+                }
+                Some(Err(e)) => return Some(Err(e)),
+            }
+        }
+    }
+}
+
 /// Configures and loads a [`SynthOf`].
 ///
 /// The config, the weights path and the normalization policy are required, and
@@ -1091,6 +1162,7 @@ pub struct SynthBuilder {
     eos_threshold: Option<f32>,
     voice: Option<String>,
     max_tokens_per_chunk: usize,
+    speed: f32,
     voices: Vec<(String, PathBuf)>,
     normalize: Normalize,
 }
@@ -1138,6 +1210,7 @@ impl SynthBuilder {
             eos_threshold: None,
             voice: None,
             max_tokens_per_chunk: MAX_TOKENS_PER_CHUNK,
+            speed: 1.0,
             voices: vec![],
         }
     }
@@ -1202,6 +1275,13 @@ impl SynthBuilder {
     /// sentence boundaries.
     pub fn max_tokens_per_chunk(mut self, max_tokens: usize) -> Self {
         self.max_tokens_per_chunk = max_tokens;
+        self
+    }
+
+    /// Default speaking speed, as a multiple of the model's natural rate. `1.0`
+    /// unless set. See [`SpeechOptions::speed`].
+    pub fn speed(mut self, speed: f32) -> Self {
+        self.speed = speed;
         self
     }
 
@@ -1325,6 +1405,7 @@ impl SynthBuilder {
                 seed: self.seed,
                 cfg_coef: self.cfg_coef,
                 max_tokens_per_chunk: self.max_tokens_per_chunk,
+                speed: self.speed,
             },
             normalize: self.normalize,
         };
@@ -1717,6 +1798,7 @@ mod tests {
             seed: 42,
             cfg_coef: None,
             max_tokens_per_chunk: 50,
+            speed: 1.0,
         }
     }
 
@@ -1735,6 +1817,19 @@ mod tests {
     }
 
     #[test]
+    fn a_speed_out_of_range_is_rejected_as_an_argument() {
+        for bad in [0.0f32, 10.0, f32::NAN] {
+            let opts = SpeechOptions::default().speed(bad);
+            let err = resolve(&defaults(), &opts).unwrap_err();
+            assert!(matches!(err, Error::InvalidArgument(_)), "{bad}: {err:?}");
+        }
+        // The builder's default goes through the same check.
+        let err = resolve(&Defaults { speed: 0.0, ..defaults() }, &SpeechOptions::default());
+        assert!(matches!(err, Err(Error::InvalidArgument(_))));
+        assert_eq!(resolve(&defaults(), &SpeechOptions::default().speed(1.5)).unwrap().speed, 1.5);
+    }
+
+    #[test]
     fn unset_options_leave_the_defaults_alone() {
         let d = defaults();
         let got = resolve(&d, &SpeechOptions::default()).unwrap();
@@ -1742,6 +1837,7 @@ mod tests {
         assert_eq!(got.temperature, d.temperature);
         assert_eq!(got.seed, d.seed);
         assert_eq!(got.max_tokens_per_chunk, d.max_tokens_per_chunk);
+        assert_eq!(got.speed, d.speed);
     }
 
     /// The regression this function exists for: `session` used to drop the
@@ -1800,6 +1896,48 @@ mod tests {
             flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok(),
             "and the next generation must be able to claim it"
         );
+    }
+
+    /// A stream fed by hand rather than by worker threads.
+    fn stream_of(chunks: Vec<Vec<f32>>) -> SpeechStream {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for chunk in chunks {
+            tx.send(Ok(chunk)).unwrap();
+        }
+        SpeechStream {
+            rx: Some(rx),
+            sample_rate: 24_000,
+            failed: false,
+            workers: None,
+            stretch: None,
+        }
+    }
+
+    fn tone(n: usize) -> Vec<f32> {
+        (0..n).map(|i| (i as f32 * 0.03).sin() * 0.5).collect()
+    }
+
+    #[test]
+    fn a_stream_at_normal_speed_hands_chunks_over_as_decoded() {
+        let chunks = vec![tone(1920), tone(3840), tone(1920)];
+        let mut stream = stream_of(chunks.clone());
+        stream.set_speed(1.0).unwrap();
+        assert!(stream.stretch.is_none(), "1x needs no speed change at all");
+        let got: Vec<_> = stream.map(|c| c.unwrap()).collect();
+        assert_eq!(got, chunks);
+    }
+
+    #[test]
+    fn a_faster_stream_is_shorter_and_ends_with_what_was_held() {
+        let chunks = vec![tone(1920); 25];
+        let total: usize = chunks.iter().map(Vec::len).sum();
+        let mut stream = stream_of(chunks);
+        stream.set_speed(1.5).unwrap();
+        let got: Vec<_> = stream.map(|c| c.unwrap()).collect();
+        assert!(got.iter().all(|c| !c.is_empty()), "no empty chunks");
+        let len: usize = got.iter().map(Vec::len).sum();
+        let want = total as f32 / 1.5;
+        assert!((len as f32 - want).abs() / want < 0.01, "{len} samples, wanted {want}");
     }
 
     #[test]

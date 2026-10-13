@@ -57,6 +57,11 @@ export interface SpeechOptions {
   temperature?: number;
   /** Noise seed: the same text, voice, temperature and seed give the same audio. Default `42`. */
   seed?: number;
+  /**
+   * How fast to speak, from `0.25` to `4` times the model's natural rate, without changing
+   * pitch: the audio is time-stretched as it is generated. Default `1`.
+   */
+  speed?: number;
   /** Aborting stops the generation; the stream ends with what was produced so far. */
   signal?: AbortSignal;
 }
@@ -65,8 +70,9 @@ export interface SpeechStats {
   /** Sentence-aligned chunks the text was split into. */
   chunks?: number;
   tokens?: number;
-  /** 80 ms frames generated. */
+  /** 80 ms frames generated, before any change of speed. */
   frames?: number;
+  /** Samples of audio produced, after any change of speed. */
   samples?: number;
   /** Time spent prompting the model with each chunk's text, summed. */
   promptMs?: number;
@@ -106,7 +112,8 @@ export declare class PhononTTS {
    */
   addVoice(name: string, source: string | URL | ArrayBuffer | Uint8Array | Blob): Promise<void>;
   /**
-   * Speak `text`, yielding mono PCM at `sampleRate` as it is generated, 80 ms per chunk.
+   * Speak `text`, yielding mono PCM at `sampleRate` as it is generated, 80 ms per chunk at
+   * normal speed.
    * Long text is split at sentence boundaries. Requests run one at a time, in order.
    */
   stream(text: string, options?: SpeechOptions): SpeechStream;

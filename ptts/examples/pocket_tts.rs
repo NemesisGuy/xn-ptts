@@ -76,6 +76,11 @@ struct Args {
     #[arg(long)]
     cfg_coef: Option<f32>,
 
+    /// Speaking speed, as a multiple of the model's natural rate, from 0.25 to 4. The pitch
+    /// stays the same: the audio is time-stretched after it is generated.
+    #[arg(long, default_value_t = 1.0)]
+    speed: f32,
+
     /// Replay noise from a JSON array of floats instead of sampling it, so a
     /// run can be compared against the reference implementation step for step.
     #[arg(long)]
@@ -98,8 +103,9 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    // Parsed before anything is downloaded, so a bad --lang fails in milliseconds.
+    // Parsed before anything is downloaded, so a bad --lang or --speed fails in milliseconds.
     let normalize = Normalize::parse(&args.lang)?;
+    ptts::speed::check_speed(args.speed)?;
     if let Some(threads) = args.threads {
         // Must happen before the first tensor op, since it sets the size of rayon's global pool.
         xn::set_num_threads(threads);
@@ -124,7 +130,8 @@ fn main() -> Result<()> {
         .builder(normalize)
         .device(DeviceKind::parse(&args.device)?)
         .temperature(args.temperature)
-        .seed(args.seed);
+        .seed(args.seed)
+        .speed(args.speed);
     if let Some(tokenizer) = args.tokenizer.as_deref() {
         builder = builder.tokenizer_file(tokenizer);
     }

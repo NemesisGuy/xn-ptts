@@ -151,6 +151,14 @@ test('a stream right after addVoice waits for the voice', async () => {
   assert.deepEqual(FakeWorker.last.log.slice(-2), ['add_voice', 'generate']);
 });
 
+test('speed reaches the worker, and defaults to 1', async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  const tts = await load();
+  await tts.synth('Normal.');
+  await tts.synth('Fast.', { speed: 1.5 });
+  assert.deepEqual(FakeWorker.last.generations.map((g) => g.speed), [1, 1.5]);
+});
+
 test('after a worker crash, later requests fail with the crash', async () => {
   const tts = await load();
   FakeWorker.last.onerror({ message: 'out of memory' });

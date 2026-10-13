@@ -64,7 +64,7 @@ stopButton.onclick = () => controller.abort();
 
 ### Instance
 
-- `tts.stream(text, { voice, temperature, seed, signal })` returns a `SpeechStream`: an async iterable of `Float32Array`, plus `done` and `cancel()`.
+- `tts.stream(text, { voice, temperature, seed, speed, signal })` returns a `SpeechStream`: an async iterable of `Float32Array`, plus `done` and `cancel()`.
 - `tts.synth(text, options)` returns the whole waveform as a `Float32Array`.
 - `tts.synthWav(text, options)` returns a WAV `Blob`.
 - `tts.voices`: the names you can pass as `voice`. Default voices: `alba`, `marius`, `javert`, `jean`, `fantine`, `cosette`, `eponine`, `azelma`.
@@ -73,6 +73,8 @@ stopButton.onclick = () => controller.abort();
 - `tts.dispose()` stops the worker and frees the model's memory.
 
 `temperature` defaults to `0.3` and `seed` to `42`. The same text, voice, temperature and seed always give the same audio.
+
+`speed` speaks faster or slower without changing the voice's pitch, from `0.25` to `4` times the model's natural rate. It defaults to `1`. The audio is time-stretched as it is generated, so it does not change what the model says or how long generation takes.
 
 Requests on one instance run one at a time, in the order they were made.
 

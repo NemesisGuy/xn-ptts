@@ -37,6 +37,7 @@
 //! | [`error`] | [`Error`], what those two return. |
 //! | [`plan`] | Frame and KV budgets, the end-of-speech policy. |
 //! | [`preprocess`] | Per-language text normalization, applied before tokenizing. |
+//! | [`speed`] | Pitch-preserving speed change, applied to the generated audio. |
 //! | [`tok`] | The Hugging Face tokenizer, behind the `hf` feature. |
 //! | [`audio`] | Decoding and resampling audio files for voice cloning, behind `audio`. |
 //! | [`tts_model`] | [`tts_model::TTSModel`], the streaming primitives `synth` drives. |
@@ -88,6 +89,7 @@ pub mod preprocess;
 pub mod resample;
 pub mod rope;
 pub mod seanet;
+pub mod speed;
 pub mod synth;
 #[cfg(feature = "hf")]
 pub mod tok;

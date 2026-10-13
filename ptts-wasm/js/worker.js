@@ -82,10 +82,10 @@ async function handleAddVoice(name, source) {
   voices.set(name, model.add_voice(bytes));
 }
 
-async function handleGenerate(id, { text, voice, temperature, seed }) {
+async function handleGenerate(id, { text, voice, temperature, seed, speed }) {
   const index = await voiceIndex(voice);
   const t0 = performance.now();
-  const chunks = model.start_generation(index, text, temperature, seed >>> 0);
+  const chunks = model.start_generation(index, text, temperature, seed >>> 0, speed);
 
   const stats = { chunks, tokens: 0, frames: 0, samples: 0, promptMs: 0, stepMs: { avg: 0, min: 0, max: 0 }, firstAudioMs: null, totalMs: 0, cancelled: false };
   let stepMsTotal = 0;
@@ -111,9 +111,13 @@ async function handleGenerate(id, { text, voice, temperature, seed }) {
         stepMsMin = Math.min(stepMsMin, dt);
         stats.stepMs.max = Math.max(stats.stepMs.max, dt);
         stats.frames++;
-        stats.samples += pcm.length;
-        stats.firstAudioMs ??= performance.now() - t0;
-        post({ type: 'chunk', id, pcm }, [pcm.buffer]);
+        // At a speed other than 1 a step can return no audio while the time-stretch gathers
+        // enough for its next splice. There is nothing to send, but still a reason to yield.
+        if (pcm.length > 0) {
+          stats.samples += pcm.length;
+          stats.firstAudioMs ??= performance.now() - t0;
+          post({ type: 'chunk', id, pcm }, [pcm.buffer]);
+        }
         await yieldToEventLoop();
       }
     }

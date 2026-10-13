@@ -43,7 +43,13 @@ async fn serve(socket: WebSocket, app: AppState) -> Result<()> {
 
 enum SessionState {
     Awaiting,
-    Ready { session: Session, text_buffer: String, stream_id: u32, encoder: Box<Encoder> },
+    Ready {
+        session: Session,
+        text_buffer: String,
+        stream_id: u32,
+        encoder: Box<Encoder>,
+        speed: f32,
+    },
 }
 
 async fn run_session(
@@ -71,7 +77,15 @@ async fn run_session(
         match (&mut sess, req) {
             (
                 SessionState::Awaiting,
-                TtsRequest::Setup { model_name, output_format, voice, voice_id, voice_emb, .. },
+                TtsRequest::Setup {
+                    model_name,
+                    output_format,
+                    voice,
+                    voice_id,
+                    voice_emb,
+                    speed,
+                    ..
+                },
             ) => match handle_setup(
                 &app,
                 model_name,
@@ -79,6 +93,7 @@ async fn run_session(
                 voice,
                 voice_id,
                 voice_emb,
+                speed,
                 reply_tx,
             )
             .await?
@@ -104,17 +119,19 @@ async fn run_session(
                 text_buffer.push_str(&text);
             }
             (
-                SessionState::Ready { session, text_buffer, stream_id, encoder },
+                SessionState::Ready { session, text_buffer, stream_id, encoder, speed },
                 TtsRequest::Flush { flush_id },
             ) => {
-                flush_buffer(&app, session, text_buffer, stream_id, encoder, reply_tx).await?;
+                flush_buffer(&app, session, text_buffer, stream_id, encoder, *speed, reply_tx)
+                    .await?;
                 let _ = reply_tx.send(TtsReply::Flushed { flush_id });
             }
             (
-                SessionState::Ready { session, text_buffer, stream_id, encoder },
+                SessionState::Ready { session, text_buffer, stream_id, encoder, speed },
                 TtsRequest::EndOfStream,
             ) => {
-                flush_buffer(&app, session, text_buffer, stream_id, encoder, reply_tx).await?;
+                flush_buffer(&app, session, text_buffer, stream_id, encoder, *speed, reply_tx)
+                    .await?;
                 let _ = reply_tx.send(TtsReply::EndOfStream);
                 tracing::info!("websocket stream closed by client (end of stream)");
                 return Ok(());
@@ -131,6 +148,7 @@ async fn flush_buffer(
     text_buffer: &mut String,
     stream_id: &mut u32,
     encoder: &mut Encoder,
+    speed: f32,
     reply_tx: &tokio::sync::mpsc::UnboundedSender<TtsReply>,
 ) -> Result<()> {
     if text_buffer.is_empty() {
@@ -139,13 +157,15 @@ async fn flush_buffer(
     let stream_id_now = *stream_id;
     *stream_id = stream_id.saturating_add(1);
     let text = std::mem::take(text_buffer);
-    if let Err(e) = generate_one(app, session, &text, stream_id_now, encoder, reply_tx).await {
+    if let Err(e) = generate_one(app, session, &text, stream_id_now, encoder, speed, reply_tx).await
+    {
         tracing::warn!(error = %e, stream_id = stream_id_now, "generation failed");
         send_error(reply_tx, error_codes::INTERNAL, format!("generation failed: {e}"))?;
     }
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_setup(
     app: &AppState,
     model_name: String,
@@ -153,6 +173,7 @@ async fn handle_setup(
     voice: Option<String>,
     voice_id: Option<String>,
     voice_emb: Option<String>,
+    speed: Option<f32>,
     reply_tx: &tokio::sync::mpsc::UnboundedSender<TtsReply>,
 ) -> Result<Option<SessionState>> {
     if voice_emb.as_deref().is_some_and(|s| !s.is_empty()) {
@@ -161,6 +182,11 @@ async fn handle_setup(
             error_codes::NOT_IMPLEMENTED,
             "voice_emb prompts are not yet supported".into(),
         )?;
+        return Ok(None);
+    }
+    let speed = speed.unwrap_or(1.0);
+    if let Err(e) = ptts::speed::check_speed(speed) {
+        send_error(reply_tx, error_codes::BAD_REQUEST, e.to_string())?;
         return Ok(None);
     }
     let format = match output_format.parse::<Format>() {
@@ -231,6 +257,7 @@ async fn handle_setup(
         text_buffer: String::new(),
         stream_id: 0,
         encoder: Box::new(encoder),
+        speed,
     }))
 }
 
@@ -240,6 +267,7 @@ async fn generate_one(
     text: &str,
     stream_id: u32,
     encoder: &mut Encoder,
+    speed: f32,
     reply_tx: &tokio::sync::mpsc::UnboundedSender<TtsReply>,
 ) -> Result<()> {
     use base64::Engine;
@@ -263,7 +291,8 @@ async fn generate_one(
     let rng = Box::new(ptts::flow_lm::NormalRng::new(app.temperature, seed)?);
 
     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<f32>>();
-    let stream = session.stream_tokens(tokens, frames_after_eos, rng)?;
+    let mut stream = session.stream_tokens(tokens, frames_after_eos, rng)?;
+    stream.set_speed(speed)?;
     // The generation threads are `Synth`'s; this one just moves chunks onto the
     // tokio channel so the socket writer stays async.
     let join = tokio::task::spawn_blocking(move || -> Result<()> {
@@ -278,12 +307,25 @@ async fn generate_one(
     });
 
     // `SpeechStream` decodes every queued latent in one call, so a chunk can
-    // carry several Mimi frames. The resampled formats build their
-    // `FftFixedInOut` for exactly one `frame_size`, so feed it a frame at a
-    // time rather than whatever the batch happened to be.
+    // carry several Mimi frames, and a speed change makes chunks of any size.
+    // The resampled formats build their `FftFixedInOut` for exactly one
+    // `frame_size`, so feed it a frame at a time, carrying any remainder over
+    // to the next chunk and padding the last one with silence.
     let frame = app.frame_size as usize;
-    'send: while let Some(pcm) = audio_rx.recv().await {
-        for pcm in pcm.chunks(frame) {
+    let mut pending: Vec<f32> = Vec::with_capacity(2 * frame);
+    'send: loop {
+        let done = match audio_rx.recv().await {
+            Some(pcm) => {
+                pending.extend_from_slice(&pcm);
+                false
+            }
+            None => {
+                pending.resize(pending.len().next_multiple_of(frame), 0.0);
+                true
+            }
+        };
+        let whole = pending.len() / frame * frame;
+        for pcm in pending[..whole].chunks(frame) {
             let encoded = encoder.encode(pcm)?;
             let audio = base64::engine::general_purpose::STANDARD.encode(&encoded.data);
             if reply_tx
@@ -298,6 +340,10 @@ async fn generate_one(
                 // The client is gone; stop draining entirely, not just this batch.
                 break 'send;
             }
+        }
+        pending.drain(..whole);
+        if done {
+            break;
         }
     }
     drop(audio_rx);
