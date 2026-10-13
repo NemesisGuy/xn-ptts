@@ -44,6 +44,11 @@ struct Args {
     #[arg(long, env = "PTTS_VOICE_DIR")]
     voice_dir: Option<std::path::PathBuf>,
 
+    /// Optional JSONL voice catalog to load, one `{"name", "filename"}` object per line with
+    /// `filename` relative to the catalog. Voices that fail to load are logged and skipped.
+    #[arg(long, env = "PTTS_VOICE_CATALOG")]
+    voice_catalog: Option<std::path::PathBuf>,
+
     #[arg(long, default_value_t = 0.3, env = "PTTS_TEMPERATURE")]
     temperature: f32,
 
@@ -166,6 +171,7 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
         &args.config,
         args.revision.as_deref(),
         args.voice_dir.as_ref(),
+        args.voice_catalog.as_deref(),
         device,
         quant,
         args.temperature,

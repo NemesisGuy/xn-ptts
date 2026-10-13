@@ -238,7 +238,7 @@ struct Tts {
 
 #[pymethods]
 impl Tts {
-    /// `TTS(config=None, device=None, quant=None, voice=None, temperature=0.3, seed=..., cfg_coef=None, eos_threshold=None, *, lang, rewrites=None, conditions=None, revision=None)`
+    /// `TTS(config=None, device=None, quant=None, voice=None, temperature=0.3, seed=..., cfg_coef=None, eos_threshold=None, *, lang, rewrites=None, conditions=None, revision=None, voice_catalog=None)`
     ///
     /// `lang` is required and keyword-only: the language text is normalized as
     /// before it is tokenized, one of `"en"`, `"fr"`, `"de"`, `"es"` or
@@ -251,6 +251,10 @@ impl Tts {
     /// `"default"` (what `None` means: numbers, currency, dashed-digits,
     /// emails, urls, abbreviations, elongations), `"all"` (those and phones,
     /// times, dates), `"none"`, or a comma-separated list of rule names.
+    ///
+    /// `voice_catalog` is a local JSONL file whose voices are registered
+    /// beside the checkpoint's, one `{"name", "filename"}` object per line
+    /// with `filename` relative to the catalog.
     #[new]
     #[pyo3(signature = (
         config = None,
@@ -266,6 +270,7 @@ impl Tts {
         rewrites = None,
         conditions = None,
         revision = None,
+        voice_catalog = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -282,6 +287,7 @@ impl Tts {
         rewrites: Option<&str>,
         conditions: Option<HashMap<String, Bound<'_, PyAny>>>,
         revision: Option<String>,
+        voice_catalog: Option<std::path::PathBuf>,
     ) -> PyResult<Self> {
         let conditions = conditions
             .unwrap_or_default()
@@ -313,7 +319,10 @@ impl Tts {
         quant.check_device(device).py()?;
         // Loading reads hundreds of megabytes and runs no Python.
         py.detach(move || {
-            let artifacts = resolve(config.as_deref(), revision.as_deref(), quant).py()?;
+            let mut artifacts = resolve(config.as_deref(), revision.as_deref(), quant).py()?;
+            if let Some(catalog) = voice_catalog {
+                artifacts.add_voice_catalog(catalog).py()?;
+            }
             let mut builder = artifacts
                 .builder(normalize)
                 .device(device)
@@ -449,6 +458,13 @@ impl Tts {
     fn add_voice(&self, py: Python<'_>, name: &str, path: std::path::PathBuf) -> PyResult<()> {
         let inner = Arc::clone(&self.inner);
         py.detach(move || inner.lock().map_err(|_| poisoned())?.add_voice_file(name, &path).py())
+    }
+
+    /// Register every voice of a JSONL catalog, one `{"name", "filename"}` object per line
+    /// with `filename` relative to the catalog.
+    fn add_voice_catalog(&self, py: Python<'_>, path: std::path::PathBuf) -> PyResult<()> {
+        let inner = Arc::clone(&self.inner);
+        py.detach(move || inner.lock().map_err(|_| poisoned())?.add_voice_catalog(&path).py())
     }
 
     /// Replace the conditions, without reloading the model. Values go through `str()`,

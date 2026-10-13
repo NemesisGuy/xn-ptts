@@ -45,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
         "-d", "--device", help=f"one of {', '.join(['auto', *available_devices()])} (default: auto)"
     )
     p.add_argument("--revision", help="Hugging Face branch, tag, or commit")
+    p.add_argument("--voice-catalog", help="JSONL voice catalog to register beside the checkpoint's voices")
     p.add_argument("-q", "--quant", help=f"weight format: {', '.join(available_quants())}")
     p.add_argument("-t", "--temperature", type=float, help="sampling temperature")
     p.add_argument("-s", "--seed", type=int, help="sampling seed, for a reproducible run")
@@ -90,7 +91,17 @@ def main(argv: list[str] | None = None) -> int:
         set_num_threads(args.threads)
 
     kwargs: dict[str, object] = {"lang": args.lang}
-    for name in ("config", "device", "quant", "voice", "seed", "temperature", "rewrites", "revision"):
+    for name in (
+        "config",
+        "device",
+        "quant",
+        "voice",
+        "seed",
+        "temperature",
+        "rewrites",
+        "revision",
+        "voice_catalog",
+    ):
         value = getattr(args, {"config": "model"}.get(name, name))
         if value is not None:
             kwargs[name] = value

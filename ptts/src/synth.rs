@@ -1733,6 +1733,14 @@ pub trait SynthApi: sealed::Sealed + Send + Sync {
     /// Register a precomputed voice embedding, replacing any voice of the same name.
     fn add_voice_file(&mut self, name: &str, path: &FsPath) -> Result<()>;
 
+    /// Register every voice of a JSONL catalog, see [`loader::read_voice_catalog`].
+    fn add_voice_catalog(&mut self, path: &FsPath) -> Result<()> {
+        for (name, path) in loader::read_voice_catalog(path)? {
+            self.add_voice_file(&name, &path)?;
+        }
+        Ok(())
+    }
+
     /// Clone a voice from a mono audio prompt.
     ///
     /// `pcm` must be at [`Self::voice_prompt_sample_rate`] and last between

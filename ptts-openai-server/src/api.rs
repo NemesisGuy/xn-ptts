@@ -311,6 +311,7 @@ mod tests {
             &path,
             None,
             None,
+            None,
             DeviceKind::Cpu,
             Quant::Q80,
             0.3,
