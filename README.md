@@ -2,7 +2,7 @@
 
 **Streaming speech, on your device.**
 
-Phonon brings natural text-to-speech to phones, laptops, browsers, and local services. It is built for offline assistants, accessibility tools, and interactive experiences that need speech without a cloud round trip. The runtime is written in Rust and needs no PyTorch.
+Phonon brings natural text-to-speech to phones, laptops, browsers, and local services such as [Home Assistant](#home-assistant). It is built for offline assistants, accessibility tools, and interactive experiences that need speech without a cloud round trip. The runtime is written in Rust and needs no PyTorch.
 
 [![Rust CI](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml)
 [![Python wheels](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml)
@@ -19,6 +19,7 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 [![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?include_prereleases&label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
 [![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
 [![Android QNN package](https://img.shields.io/badge/Android-QNN%20source%20preview-blue)](#android)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Wyoming-41BDF5?logo=homeassistant&logoColor=white)](#home-assistant)
 
 [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Packages and downloads](#packages-and-downloads) · [Quickstart](#quickstart) · [Guides](#guides)
 
@@ -33,6 +34,7 @@ The browser runs synthesis on your device; it downloads model files on first use
 - **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
 - **Voices ready to use or make your own:** Choose from ready-to-use voices, or explore voice design and cloning in [Gradium Studio](https://studio.gradium.ai/).
 - **Control the delivery:** Adjust speaking speed and start playing streamed audio before the full utterance is ready.
+- **A local voice for Home Assistant:** Give your voice assistant a voice that runs on your own hardware, with no custom integration. Replies are spoken while the assistant is still writing them.
 
 ## Performance
 
@@ -47,6 +49,7 @@ The browser runs synthesis on your device; it downloads model files on first use
 | Run speech in a web app | [Browser](#browser) | `phonon-tts` and model files served with your app. |
 | Add speech to an iPhone or Mac app | [Swift](#swift) | The `ptts` Swift package and a prepared Core ML bundle. |
 | Add speech to an Android app | [Android](#android) | A Kotlin AAR preview for supported Snapdragon NPUs, or the CPU native library. Source build and model files required. |
+| Give Home Assistant's voice assistant a local voice | [Home Assistant](#home-assistant) | Home Assistant and a checkpoint. No custom integration. |
 | Connect an existing app or self-host | [Docker and OpenAI-compatible API](#docker-and-openai-compatible-api) | Docker and a local checkpoint or HF repo. |
 | Embed the runtime in Rust | [Rust](#rust) | The `ptts` crate and a checkpoint folder. |
 
@@ -65,6 +68,7 @@ Packages and native downloads are available as a runtime preview. Follow the [ru
 | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; model weights downloaded or mounted separately. [Server guide](ptts-openai-server/README.md). |
+| Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. [Home Assistant quickstart](#home-assistant). |
 | Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
 Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs may need a source build: x86 wheels and desktop downloads target x86-64-v3. See the platform requirements in the [CLI guide](docs/cli.md) and [Python guide](ptts-pyo3/README.md).
@@ -283,6 +287,31 @@ export ANDROID_NDK_HOME=/path/to/ndk
 ```
 
 Copy `android/jniLibs` into your app's `src/main/`, then add the Kotlin wrapper and JNA dependency as described in the guide. Supply a checkpoint with its own config, tokenizer, weights and voices. Load `PhononTTS(modelDir, "en")` on a worker thread and reuse it. The guide includes AudioTrack playback, CPU requirements and callback cancellation.
+
+</details>
+
+### Home Assistant
+
+<details>
+<summary>Show Home Assistant quickstart</summary>
+
+Phonon connects to Home Assistant's voice assistants over the Wyoming protocol, which Home Assistant supports out of the box. Replies are spoken a sentence at a time while the assistant is still writing them.
+
+**Home Assistant OS:** add the Phonon app repository, then install **Phonon** and set its model and language. Home Assistant finds it on its own and offers to set it up.
+
+[![Add the Phonon app repository to your Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fgradium-ai%2Fphonon-home-assistant)
+
+**Home Assistant Container or Core:** run the server with the Wyoming port open, using an image version as in the [Docker quickstart](#docker-and-openai-compatible-api):
+
+```sh
+PTTS_IMAGE="ghcr.io/gradium-ai/ptts-openai-server:<release-version>"
+docker run -d --restart unless-stopped -p 10200:10200 -v "$MODEL_DIR:/models:ro" \
+  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_WYOMING_ADDR=0.0.0.0:10200 \
+  "$PTTS_IMAGE"
+```
+
+Then add the **Wyoming Protocol** integration in Home Assistant with this machine's address and port `10200`, and choose **Phonon** as your voice assistant's text-to-speech engine. Voices, languages and limits are in the [server guide](ptts-openai-server/README.md#home-assistant).
 
 </details>
 
