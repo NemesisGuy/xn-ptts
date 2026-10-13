@@ -40,6 +40,9 @@ class TTS:
     `rewrites` picks which word rewrites run on the normalized text: `"default"` (what `None`
     means: numbers, currency, dashed-digits, emails, urls, abbreviations, elongations), `"all"`
     (those and phones, times, dates), `"none"`, or a comma-separated list of rule names.
+
+    `voice_catalog` is a local JSONL file whose voices are registered beside the checkpoint's,
+    one `{"name", "filename"}` object per line with `filename` relative to the catalog.
     """
 
     def __init__(
@@ -57,6 +60,7 @@ class TTS:
         rewrites: str | None = None,
         conditions: dict[str, str | float] | None = None,
         revision: str | None = None,
+        voice_catalog: str | PathLike[str] | None = None,
     ) -> None: ...
     @property
     def sample_rate(self) -> int:
@@ -129,6 +133,10 @@ class TTS:
 
     def add_voice(self, name: str, path: str | PathLike[str]) -> None:
         """Register a voice from a precomputed embedding file."""
+
+    def add_voice_catalog(self, path: str | PathLike[str]) -> None:
+        """Register every voice of a JSONL catalog, one `{"name", "filename"}` object per line
+        with `filename` relative to the catalog."""
 
     def set_conditions(self, conditions: dict[str, str | float]) -> None:
         """Replace the conditions, without reloading the model.

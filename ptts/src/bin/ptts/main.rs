@@ -54,6 +54,11 @@ struct Args {
     #[arg(long)]
     dir: Option<std::path::PathBuf>,
 
+    /// JSONL voice catalog to register, one `{"name", "filename"}` object per line with
+    /// `filename` relative to the catalog. Its voices can then be picked with --voice.
+    #[arg(long)]
+    voice_catalog: Option<std::path::PathBuf>,
+
     /// Tokenizer to load, as a path to a `tokenizer.json`. Defaults to the one
     /// the checkpoint ships.
     #[arg(long)]
@@ -137,7 +142,10 @@ fn main() -> Result<()> {
     let quant = args.quant.as_deref().unwrap_or("f32").parse::<Quant>()?;
     let device = args.device.parse::<DeviceKind>()?;
     quant.check_device(device)?;
-    let checkpoint = model_helpers::locate(source, args.weights.as_deref(), quant)?;
+    let mut checkpoint = model_helpers::locate(source, args.weights.as_deref(), quant)?;
+    if let Some(catalog) = args.voice_catalog.as_deref() {
+        checkpoint.add_voice_catalog(catalog)?;
+    }
     let mut builder =
         checkpoint.builder(normalize).device(device).temperature(args.temperature).seed(args.seed);
     if let Some(tokenizer) = args.tokenizer.as_deref() {

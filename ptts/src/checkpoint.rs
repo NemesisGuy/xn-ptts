@@ -96,6 +96,17 @@ impl Checkpoint {
         builder
     }
 
+    /// Add the voices of a JSONL catalog, see [`crate::loader::read_voice_catalog`],
+    /// replacing any of the same name.
+    pub fn add_voice_catalog(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        for (name, path) in crate::loader::read_voice_catalog(path.as_ref())? {
+            self.voices.retain(|(known, _)| *known != name);
+            self.voices.push((name, path));
+        }
+        self.voices.sort();
+        Ok(())
+    }
+
     /// Register checkpoint voices, warning if an optional voice is unreadable.
     pub fn register_voices(&self, synth: &mut Synth) {
         for (name, path) in &self.voices {

@@ -92,6 +92,7 @@ pub async fn load_ptts(
     config: &std::path::Path,
     revision: Option<&str>,
     voice_dir: Option<&std::path::PathBuf>,
+    voice_catalog: Option<&std::path::Path>,
     device: DeviceKind,
     quant: Quant,
     temperature: f32,
@@ -125,7 +126,7 @@ pub async fn load_ptts(
             (load_from_hf(repo_id, revision, quant).await?, repo_id.to_string(), url)
         }
     };
-    let extra_voices = if let Some(voice_dir) = voice_dir {
+    let mut extra_voices = if let Some(voice_dir) = voice_dir {
         let found = ptts::loader::voices_in(voice_dir);
         if found.is_empty() {
             tracing::warn!(?voice_dir, "no voice files found in --voice-dir");
@@ -134,6 +135,9 @@ pub async fn load_ptts(
     } else {
         Vec::new()
     };
+    if let Some(catalog) = voice_catalog {
+        extra_voices.extend(ptts::loader::read_voice_catalog(catalog)?);
+    }
     let frame_rate = m.config.mimi.frame_rate;
     let mut builder = m.builder(normalize).device(device).quant(quant).temperature(temperature);
     for (name, value) in conditions {
@@ -198,6 +202,7 @@ mod checkpoint_tests {
             &path,
             None,
             Some(&extra_dir),
+            None,
             DeviceKind::Cpu,
             Quant::Q80,
             0.3,

@@ -29,7 +29,7 @@ The Hub Compose file requires an image release that includes this writable cache
 
 The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
 
-Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
+Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. A JSONL voice catalog, one `{"name", "filename"}` object per line with `filename` relative to the catalog, is loaded with `PTTS_VOICE_CATALOG=/voices/voices.jsonl`. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
 
 ```bash
 docker compose -f ptts-openai-server/compose.yaml up

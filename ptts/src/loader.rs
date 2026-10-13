@@ -111,6 +111,27 @@ pub fn voices_in(dir: &std::path::Path) -> Vec<(String, std::path::PathBuf)> {
     voices
 }
 
+/// The voices of a JSONL catalog, one `{"name", "filename"}` object per line, as (name, path)
+/// with `filename` resolved against the catalog's directory.
+pub fn read_voice_catalog(path: &std::path::Path) -> Result<Vec<(String, std::path::PathBuf)>> {
+    #[derive(serde::Deserialize)]
+    struct Entry {
+        name: String,
+        filename: std::path::PathBuf,
+    }
+    let dir = path.parent().unwrap_or(std::path::Path::new(""));
+    let mut voices = vec![];
+    for (i, line) in std::fs::read_to_string(path)?.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: Entry = serde_json::from_str(line)
+            .map_err(|e| Error::invalid_data(format!("{}:{}: {e}", path.display(), i + 1)))?;
+        voices.push((entry.name, dir.join(entry.filename)));
+    }
+    Ok(voices)
+}
+
 /// A checkpoint directory's voices: those in each of [`VOICE_DIRS`], then
 /// [`DEFAULT_VOICE_FILE`] as `default`. A name found twice keeps the first, so `voices/` wins
 /// over `embeddings/`.
