@@ -31,6 +31,8 @@ shasum -a 256 ptts-<version>-<target>.tar.gz
 
 On Windows, compare `Get-FileHash .\ptts-<version>-x86_64-pc-windows-msvc.zip -Algorithm SHA256` with its entry in `SHA256SUMS`.
 
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), `cargo binstall ptts` installs the archive for your platform. It does not check `SHA256SUMS`. On a platform not listed above, it builds from source instead, which needs `--features cli`.
+
 ## Homebrew
 
 On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](https://github.com/gradium-ai/homebrew-tap):

@@ -17,6 +17,8 @@ cargo install ptts --locked --features cli
 ptts --dir /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
+Or install the prebuilt CPU command with `cargo binstall ptts`. It uses the desktop download for your platform, with the same requirements.
+
 Use `--repo <owner/model>` instead of `--dir` to download from Hugging Face. `--revision <commit>` pins all files to that revision. For private models, set `HF_TOKEN` or log in with the Hugging Face CLI. `ptts --help` lists all options.
 
 `--lang` is required: `en`, `fr`, `de`, `es`, `pt`, or `none` to disable normalization. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. `--quant q8` keeps q8 GGUF weights quantized on CPU; omit it for f32 weights.
