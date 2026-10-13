@@ -23,6 +23,8 @@ import requests
 API = "https://api.gradium.ai/api"
 # Every Phonon checkpoint uses the same voice files, so any model name the API knows will do.
 MODEL = "default"
+# Seconds to wait for each request.
+TIMEOUT = 60
 
 
 def check(r: requests.Response, *args, **kwargs) -> None:
@@ -30,7 +32,7 @@ def check(r: requests.Response, *args, **kwargs) -> None:
     if not r.ok:
         try:
             detail = r.json()["detail"]
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
             detail = r.text
         sys.exit(f"Gradium API error {r.status_code}: {detail}")
 
@@ -52,13 +54,14 @@ def main() -> None:
     s.hooks["response"] = check
 
     if args.list:
-        r = s.get(f"{API}/voices/", params={"include_catalog": "true", "limit": 0})
+        r = s.get(f"{API}/voices/", params={"include_catalog": "true", "limit": 0}, timeout=TIMEOUT)
         for v in r.json():
             print(f"{v['uid']}  {v.get('language') or '--'}  {v['name']}: {v.get('description') or ''}")
         return
 
-    r = s.get(f"{API}/voices/embeddings/{args.voice_id}/{MODEL}/blob", params={"as_safetensors": "1"})
+    r = s.get(f"{API}/voices/embeddings/{args.voice_id}/{MODEL}/blob", params={"as_safetensors": "1"}, timeout=TIMEOUT)
     out = args.out or Path(f"{args.voice_id}.safetensors")
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(r.content)
     print(f"wrote {out}")
 

@@ -25,6 +25,8 @@ import requests
 API = "https://api.gradium.ai/api"
 # Every Phonon checkpoint uses the same voice files, so any model name the API knows will do.
 MODEL = "default"
+# Seconds to wait for each request.
+TIMEOUT = 60
 
 
 def check(r: requests.Response, *args, **kwargs) -> None:
@@ -32,7 +34,7 @@ def check(r: requests.Response, *args, **kwargs) -> None:
     if not r.ok:
         try:
             detail = r.json()["detail"]
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
             detail = r.text
         sys.exit(f"Gradium API error {r.status_code}: {detail}")
 
@@ -55,21 +57,22 @@ def main() -> None:
 
     with args.audio.open("rb") as f:
         form = {"name": args.name or args.audio.stem, "language": args.lang, "start_s": args.start}
-        r = s.post(f"{API}/voices/", files={"audio_file": (args.audio.name, f)}, data=form)
+        r = s.post(f"{API}/voices/", files={"audio_file": (args.audio.name, f)}, data=form, timeout=TIMEOUT)
     voice_id = r.json().get("uid")
     if not voice_id:
         sys.exit(f"cloning failed: {r.json().get('error')}")
     print(f"created voice {voice_id}")
 
     for _ in range(60):
-        if s.get(f"{API}/voices/embeddings/{voice_id}/{MODEL}").json().get("found"):
+        if s.get(f"{API}/voices/embeddings/{voice_id}/{MODEL}", timeout=TIMEOUT).json().get("found"):
             break
         time.sleep(2)
     else:
         sys.exit(f"voice {voice_id} is not ready yet: try download-voice.py later")
 
-    r = s.get(f"{API}/voices/embeddings/{voice_id}/{MODEL}/blob", params={"as_safetensors": "1"})
+    r = s.get(f"{API}/voices/embeddings/{voice_id}/{MODEL}/blob", params={"as_safetensors": "1"}, timeout=TIMEOUT)
     out = args.out or Path(f"{voice_id}.safetensors")
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(r.content)
     print(f"wrote {out}")
 
