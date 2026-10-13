@@ -141,7 +141,8 @@ on Linux debug info lands inside the `.so`, which is what made the published 0.2
 so `--strip` is now a guard rather than a fix.
 `pyproject.toml` deliberately has no `features` key under `[tool.maturin]`: a `--features` on
 the maturin command line replaces that list rather than adding to it, so `pyo3/extension-module`
-lives in `ptts-pyo3/Cargo.toml` where the macOS job's `--features accelerate` cannot drop it.
+lives in `ptts-pyo3/Cargo.toml` where the macOS jobs' `--features` (accelerate and metal, plus
+`kai` on Apple silicon; the CLI binaries get the same) cannot drop it.
 
 Release wheels are produced by `.github/workflows/maturin-pub.yml`: manylinux and musllinux
 on x86_64 and aarch64, Windows on x64 and aarch64, macOS on aarch64 and x86_64, and an sdist.

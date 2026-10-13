@@ -59,12 +59,17 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
             rustflags: '-C target-cpu=generic'
+          # macOS gets its own fast paths, all system frameworks or compiled in: Accelerate for
+          # the f32 matmuls, Metal (what `--device auto` picks for f32 weights), and on Apple
+          # silicon Arm's KleidiAI kernels for q8, which do nothing on chips without SME2.
           - target: aarch64-apple-darwin
             runner: macos-15
             rustflags: '-C target-cpu=apple-m1'
+            features: ',accelerate,kai,metal'
           - target: x86_64-apple-darwin
             runner: macos-15-intel
             rustflags: '-C target-cpu=x86-64-v3'
+            features: ',accelerate,metal'
           - target: x86_64-pc-windows-msvc
             runner: windows-2022
             rustflags: '-C target-cpu=x86-64-v3 -C target-feature=+crt-static'
@@ -82,10 +87,23 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      # setup-rust removes target-cpu=native. These CPU binaries use fixed baselines,
-      # with no GPU SDKs or server audio libraries needed at runtime.
+      # KleidiAI's build script turns the feature off with only a warning when the C toolchain
+      # cannot assemble its SME2 kernels. A release must not lose them quietly.
+      - name: Check that the KleidiAI kernels build
+        if: contains(matrix.features, 'kai')
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=$(cargo check --locked -p ptts --features kai --target ${{ matrix.target }} 2>&1) || { echo "$out"; exit 1; }
+          if grep -q "the KleidiAI kernels did not build" <<<"$out"; then
+            echo "$out" | grep -A3 "KleidiAI"
+            echo "::error::the KleidiAI kernels did not build with this toolchain"
+            exit 1
+          fi
+      # setup-rust removes target-cpu=native. These binaries use fixed baselines, with no GPU
+      # SDKs or server audio libraries needed at runtime (macOS adds only system frameworks).
       - name: Build the command
-        run: cargo build --release --locked -p ptts --features cli --bin ptts --target ${{ matrix.target }}
+        run: cargo build --release --locked -p ptts --features cli${{ matrix.features }} --bin ptts --target ${{ matrix.target }}
       - name: Package and check the installed command
         shell: bash
         env:
