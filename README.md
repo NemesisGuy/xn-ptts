@@ -39,7 +39,7 @@ The first run downloads the default model and caches it. To run the runtime prev
 - **Small enough to ship:** Choose a 40M or 90M parameter model. Both can ship inside a mobile app or load in a browser tab.
 - **Five languages in one model:** Speak English, French, German, Spanish, and Portuguese, with more languages planned.
 - **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
-- **Voices ready to use or make your own:** Choose from ready-to-use voices, or explore voice design and cloning in [Gradium Studio](https://studio.gradium.ai/).
+- **Voices ready to use or make your own:** Choose from ready-to-use voices, or bring Gradium's catalog, voice design and cloning to your device with [two scripts](#voices).
 - **Control the delivery:** Adjust speaking speed and start playing streamed audio before the full utterance is ready.
 
 ## Performance
@@ -83,6 +83,29 @@ model/
 ```
 
 Voice files may instead live in `voices/` or `embeddings/`. Use the files and voice names your checkpoint supplies; do not substitute another model's tokenizer or config. The command line, Python and the servers load f32 weights unless given `--quant q8` or `quant="q8"`, which runs faster on the CPU; the browser loads q8 unless given `quant: 'f32'`.
+
+## Voices
+
+Each checkpoint comes with its own voices. You can also pick a voice from Gradium's catalog, design one from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio.
+
+A voice file works with one checkpoint only, so pass the model you will speak with as `--model`:
+
+```sh
+export GRADIUM_API_KEY=...
+
+# List the catalog and your own voices, with their IDs
+uv run scripts/download-voice.py --list
+
+# Download a voice by ID: from the catalog, or one you designed or cloned
+uv run scripts/download-voice.py VOICE_ID --model hf://OWNER/MODEL -o voice.safetensors
+
+# Clone a voice from a recording; 10 seconds of clear speech are used
+uv run scripts/clone-voice.py speaker.wav --lang en --model hf://OWNER/MODEL -o voice.safetensors
+
+ptts --model hf://OWNER/MODEL --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
+```
+
+To use a voice by name in Python and the servers too, save it in the checkpoint folder's `voices/`: `-o model/voices/NAME.safetensors` adds the voice `NAME`. A cloned voice is also saved in your Gradium account, so `download-voice.py` can fetch it again by the ID `clone-voice.py` prints. Clone a voice only with the speaker's consent.
 
 ## Quickstart
 
