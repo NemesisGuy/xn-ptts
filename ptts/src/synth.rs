@@ -73,8 +73,9 @@ use xn::{Backend, BackendQ, Tensor};
 /// Which device to run on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DeviceKind {
-    /// The most capable compiled-in backend: CUDA, then Vulkan, then Metal,
-    /// then the CPU.
+    /// The most capable compiled-in backend for the weight format: CUDA, then
+    /// Vulkan, then Metal, then the CPU for f32 weights, and the CPU for
+    /// quantized ones, which only it runs.
     #[default]
     Auto,
     Cpu,
@@ -98,6 +99,13 @@ impl DeviceKind {
         } else {
             Self::Cpu
         }
+    }
+
+    /// Resolve [`Self::Auto`] for weights in `quant`: quantized weights run on
+    /// the CPU whatever GPU backend is compiled in, so `auto` never picks a
+    /// device that would refuse them.
+    pub fn resolve_for(self, quant: Quant) -> Self {
+        if self == Self::Auto && quant != Quant::F32 { Self::Cpu } else { self.resolve() }
     }
 }
 
@@ -144,7 +152,7 @@ impl Quant {
     /// combination fails in milliseconds rather than after a few hundred
     /// megabytes.
     pub fn check_device(self, device: DeviceKind) -> Result<()> {
-        let device = device.resolve();
+        let device = device.resolve_for(self);
         if device != DeviceKind::Cpu && self != Self::F32 {
             return Err(Error::unsupported(format!(
                 "quantization ({}) is CPU-only, but the selected device is {device:?}",
@@ -1500,7 +1508,7 @@ impl SynthBuilder {
     /// Load the checkpoint, choosing the device and weight format from
     /// [`Self::device`] and [`Self::quant`].
     pub fn build(self) -> Result<Synth> {
-        let device = self.device.resolve();
+        let device = self.device.resolve_for(self.quant);
         self.quant.check_device(device)?;
         match device {
             DeviceKind::Cpu => self.build_cpu(),
@@ -2004,6 +2012,15 @@ impl std::fmt::Debug for Synth {
 mod tests {
     use super::*;
     use crate::preprocess::Lang;
+
+    #[test]
+    fn auto_runs_quantized_weights_on_the_cpu() {
+        // In a GPU build too: a GPU backend refuses quantized weights, so `auto` must not pick one.
+        assert_eq!(DeviceKind::Auto.resolve_for(Quant::Q80), DeviceKind::Cpu);
+        assert!(Quant::Q80.check_device(DeviceKind::Auto).is_ok());
+        assert_eq!(DeviceKind::Auto.resolve_for(Quant::F32), DeviceKind::Auto.resolve());
+        assert_eq!(DeviceKind::Metal.resolve_for(Quant::Q80), DeviceKind::Metal);
+    }
 
     fn defaults() -> Defaults {
         Defaults {
