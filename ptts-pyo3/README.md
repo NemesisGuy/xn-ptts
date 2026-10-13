@@ -8,7 +8,7 @@ To try a q8 checkpoint with [uv](https://docs.astral.sh/uv/), run:
 uvx ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-`uvx` handles the isolated Python environment and package dependencies. Model files are supplied separately; `--model` accepts a local checkpoint directory or a Hugging Face repo ID.
+`uvx` handles the isolated Python environment and package dependencies. Until the stable release, use `uvx --prerelease allow ptts` to run the preview. Model files are supplied separately; `--model` accepts a local checkpoint directory or a Hugging Face repo ID.
 
 To use the Python API in your own environment, install the package:
 
