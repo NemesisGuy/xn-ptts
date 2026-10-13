@@ -195,22 +195,22 @@ enum VoiceTensor {
 ///   projection -- unprojected latents make the model babble or stop at once, with no other
 ///   symptom -- so `None` is an error for this kind of file and is ignored for the other.
 ///
-/// When `model_ext` is given and the file records one of its own, the two must agree -- a voice
-/// conditioned on a different checkpoint produces confident nonsense rather than an error, so it
-/// is worth catching here. Pass `None` to skip the check.
+/// When `embeddings_ext` is given and the file records a `model_ext`, it must be one of them -- a
+/// voice conditioned on a different checkpoint produces confident nonsense rather than an error,
+/// so it is worth catching here. Pass `None` to skip the check.
 ///
 /// The result is f32 regardless of the backend's quantization; convert with `to::<Q::T>()`.
 pub fn load_voice_emb<B: Backend>(
     path: &std::path::Path,
-    model_ext: Option<&str>,
+    embeddings_ext: Option<&[String]>,
     speaker_proj: Option<&Linear<f32, B>>,
     dev: &B,
 ) -> Result<Tensor<f32, B>> {
     let vb = VB::load(&[path], dev.clone())?;
     let label = format!("voice file {}", path.display());
     let emb = voice_emb_from_vb(&vb, &label, speaker_proj)?;
-    if let Some(model_ext) = model_ext {
-        check_model_ext(&read_safetensors_header(path)?, &label, model_ext)?;
+    if let Some(embeddings_ext) = embeddings_ext {
+        check_model_ext(&read_safetensors_header(path)?, &label, embeddings_ext)?;
     }
     Ok(emb)
 }
@@ -219,7 +219,7 @@ pub fn load_voice_emb<B: Backend>(
 /// filesystem, fetches its voices.
 pub fn load_voice_emb_from_bytes<B: Backend>(
     bytes: &[u8],
-    model_ext: Option<&str>,
+    embeddings_ext: Option<&[String]>,
     speaker_proj: Option<&Linear<f32, B>>,
     dev: &B,
 ) -> Result<Tensor<f32, B>> {
@@ -227,8 +227,8 @@ pub fn load_voice_emb_from_bytes<B: Backend>(
     // The header first: in memory it costs nothing, a mismatch is refused before any tensor is
     // decoded, and a file that is not safetensors gets a clearer error than `VB` gives.
     let header = safetensors_header_from_bytes(bytes, label)?;
-    if let Some(model_ext) = model_ext {
-        check_model_ext(header, label, model_ext)?;
+    if let Some(embeddings_ext) = embeddings_ext {
+        check_model_ext(header, label, embeddings_ext)?;
     }
     let vb = VB::from_bytes(vec![bytes.to_vec()], dev.clone())?;
     voice_emb_from_vb(&vb, label, speaker_proj)
@@ -347,9 +347,9 @@ pub(crate) fn project_latents<B: Backend>(
     Ok(proj.forward(&latents)?)
 }
 
-/// Fails if the voice file's safetensors `header` records a `model_ext` other than
-/// `model_ext`. A file that records none is accepted: older voices predate the metadata.
-fn check_model_ext(header: &[u8], label: &str, model_ext: &str) -> Result<()> {
+/// Fails if the voice file's safetensors `header` records a `model_ext` that is not one of
+/// `embeddings_ext`. A file that records none is accepted: older voices predate the metadata.
+fn check_model_ext(header: &[u8], label: &str, embeddings_ext: &[String]) -> Result<()> {
     // Not `SafeTensors::read_metadata`: it validates that the buffer holds the
     // tensor data as well as the header, which is exactly what is not read here.
     let header: serde_json::Value = serde_json::from_slice(header).map_err(|e| {
@@ -359,10 +359,10 @@ fn check_model_ext(header: &[u8], label: &str, model_ext: &str) -> Result<()> {
         && let Some(voice_model_ext) = voice_model_ext.as_str()
     {
         tracing::info!(?voice_model_ext, "voice embedding model_ext from metadata");
-        if voice_model_ext != model_ext {
+        if !embeddings_ext.iter().any(|ext| ext == voice_model_ext) {
             return Err(Error::invalid_data(format!(
-                "voice embedding model_ext '{voice_model_ext}' does not match config model_ext \
-                 '{model_ext}'"
+                "voice embedding model_ext '{voice_model_ext}' is not one of config \
+                 embeddings_ext {embeddings_ext:?}"
             )));
         }
     }
@@ -508,12 +508,14 @@ mod tests {
             &format!(r#"{{"__metadata__":{{"model_ext":"abc@1"}},{tensor}}}"#),
         );
         let header = read_safetensors_header(&matching).unwrap();
-        check_model_ext(&header, "voice", "abc@1").unwrap();
-        assert!(check_model_ext(&header, "voice", "def@2").is_err());
+        let ext = |s: &str| vec![s.to_string()];
+        check_model_ext(&header, "voice", &ext("abc@1")).unwrap();
+        check_model_ext(&header, "voice", &[ext("def@2"), ext("abc@1")].concat()).unwrap();
+        assert!(check_model_ext(&header, "voice", &ext("def@2")).is_err());
 
         // A voice from before the metadata existed is accepted as-is.
         let bare = write("ptts-loader-voice-bare.safetensors", &format!(r#"{{{tensor}}}"#));
-        check_model_ext(&read_safetensors_header(&bare).unwrap(), "voice", "abc@1").unwrap();
+        check_model_ext(&read_safetensors_header(&bare).unwrap(), "voice", &ext("abc@1")).unwrap();
     }
 
     #[test]
@@ -527,10 +529,11 @@ mod tests {
         let tensor = r#""emb":{"dtype":"F32","shape":[2,2],"data_offsets":[0,16]}"#;
         let bytes = file(&format!(r#"{{"__metadata__":{{"model_ext":"abc@1"}},{tensor}}}"#));
 
-        let emb = load_voice_emb_from_bytes(&bytes, Some("abc@1"), None, &xn::CPU).unwrap();
+        let ext = |s: &str| vec![s.to_string()];
+        let emb = load_voice_emb_from_bytes(&bytes, Some(&ext("abc@1")), None, &xn::CPU).unwrap();
         assert_eq!(emb.dims(), [1, 2, 2]);
         assert_eq!(emb.to_vec().unwrap(), [0., 1., 2., 3.]);
-        assert!(load_voice_emb_from_bytes(&bytes, Some("def@2"), None, &xn::CPU).is_err());
+        assert!(load_voice_emb_from_bytes(&bytes, Some(&ext("def@2")), None, &xn::CPU).is_err());
 
         // Error messages name the file once.
         let empty = [&2u64.to_le_bytes()[..], b"{}"].concat();

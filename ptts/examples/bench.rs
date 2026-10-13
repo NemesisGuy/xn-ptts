@@ -288,7 +288,7 @@ impl Bench<'_> {
                 .context("baked-in voice not loaded")?,
             None => model_helpers::load_voice_emb(
                 &args.voice,
-                cfg.model_ext().as_deref(),
+                cfg.embeddings_ext.as_deref(),
                 model.speaker_proj(),
                 &dev,
             )?,

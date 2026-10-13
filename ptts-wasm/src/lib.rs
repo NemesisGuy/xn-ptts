@@ -238,10 +238,9 @@ where
     /// (`speaker_wavs`), the formats every other frontend reads. It is run through the flow
     /// LM once, here, so generation can start from the resulting state.
     fn voice_from_emb(&self, bytes: &[u8], cfg: &TTSConfig) -> Result<RawState<Q::B>> {
-        let model_ext = cfg.model_ext();
         let emb = load_voice_emb_from_bytes(
             bytes,
-            model_ext.as_deref(),
+            cfg.embeddings_ext.as_deref(),
             self.speaker_proj.as_ref(),
             &self.device,
         )?;

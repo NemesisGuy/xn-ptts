@@ -69,6 +69,8 @@ pub struct TTSConfig {
     pub voices: Vec<VoiceConfig>,
     #[serde(default)]
     pub languages: Vec<String>,
+    #[serde(default)]
+    pub embeddings_ext: Option<Vec<String>>,
 }
 
 impl TTSConfig {

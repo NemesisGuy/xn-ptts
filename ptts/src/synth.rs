@@ -555,10 +555,9 @@ impl<Q: BackendQ> SynthApi for SynthOf<Q> {
     fn add_voice_file(&mut self, name: &str, path: &FsPath) -> Result<()> {
         self.check_no_baked_voices()?;
         let dev = self.model.device().clone();
-        let model_ext = self.cfg.model_ext();
-        let emb =
-            loader::load_voice_emb(path, model_ext.as_deref(), self.model.speaker_proj(), &dev)?
-                .to::<Q::T>()?;
+        let embeddings_ext = self.cfg.embeddings_ext.as_deref();
+        let emb = loader::load_voice_emb(path, embeddings_ext, self.model.speaker_proj(), &dev)?
+            .to::<Q::T>()?;
         self.forget_primed(name);
         self.voices.insert(name.to_string(), Voice { emb, null_emb: None, conditions: None });
         Ok(())
