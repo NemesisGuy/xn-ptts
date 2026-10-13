@@ -425,12 +425,13 @@ impl<Q: BackendQ> LmModel<Q> {
         self.text_emb.device()
     }
 
-    /// One decoding step.
+    /// One decoding step. `audio_tokens` holds one `(1, 1)` index tensor per codebook,
+    /// where the quantizer left them: on a GPU they never visit the host.
     pub(crate) fn step(
         &self,
         state: &mut LmState<Q::T, Q::B>,
         text_token: u32,
-        audio_tokens: &[u32],
+        audio_tokens: &[Tensor<i64, Q::B>],
         condition: Option<&Tensor<Q::T, Q::B>>,
     ) -> Result<LmStep<Q::T, Q::B>> {
         use xn::ModuleT;
@@ -438,11 +439,10 @@ impl<Q: BackendQ> LmModel<Q> {
             xn::bail!("expected {} audio tokens, got {}", self.audio_embs.len(), audio_tokens.len())
         }
         let dev = self.device();
-        let ids = Tensor::from_vec(vec![text_token as i64], 1, dev)?;
-        let mut xs = self.text_emb.forward(&ids)?.unsqueeze(1)?;
-        for (emb, &token) in self.audio_embs.iter().zip(audio_tokens.iter()) {
-            let ids = Tensor::from_vec(vec![token as i64], 1, dev)?;
-            xs = xs.add(&emb.forward(&ids)?.unsqueeze(1)?)?;
+        let ids = Tensor::from_vec(vec![text_token as i64], (1, 1), dev)?;
+        let mut xs = self.text_emb.forward(&ids)?;
+        for (emb, ids) in self.audio_embs.iter().zip(audio_tokens.iter()) {
+            xs = xs.add(&emb.forward(ids)?)?;
         }
         if let Some(condition) = condition {
             xs = xs.add(condition)?;

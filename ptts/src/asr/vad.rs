@@ -166,18 +166,18 @@ impl<T: WithDTypeF, B: Backend> VadReadout<T, B> {
         }
     }
 
-    /// Per-head class probabilities, `num_heads` rows of `classes`.
-    pub(crate) fn probs(&self, step: &LmStep<T, B>) -> Result<Vec<Vec<f32>>> {
+    /// Per-head class probabilities, `(num_heads, classes)`, left on the device so the caller
+    /// reads every head back at once.
+    pub(crate) fn probs(&self, step: &LmStep<T, B>) -> Result<Tensor<T, B>> {
         let logits = match self {
             Self::Linear(heads) => {
                 heads.iter().map(|h| h.forward(&step.out)).collect::<Result<Vec<_>>>()?
             }
             Self::Mixer(m) => m.logits(&step.taps)?,
         };
-        logits
-            .iter()
-            .map(|l| Ok(l.softmax()?.to_vec()?.into_iter().map(|v| v.to_f32()).collect()))
-            .collect()
+        let logits =
+            logits.iter().map(|l| l.reshape((1, l.elem_count()))).collect::<Result<Vec<_>>>()?;
+        Tensor::cat(&logits.iter().collect::<Vec<_>>(), 0)?.softmax()
     }
 }
 

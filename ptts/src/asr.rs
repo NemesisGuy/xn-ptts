@@ -196,7 +196,8 @@ struct AsrModel<Q: BackendQ> {
     quantizer: MimiQuantizer<f32, Q::B>,
     lm: LmModel<Q>,
     cfg: Config,
-    audio_pad: Vec<u32>,
+    /// One `(1, 1)` pad index per codebook, for the first step.
+    audio_pad: Vec<Tensor<i64, Q::B>>,
     /// `vad_horizons` sorted ascending, with the head each reads.
     horizons: Vec<(f64, usize)>,
 }
@@ -250,7 +251,8 @@ impl<Q: BackendQ> AsrModel<Q> {
                 cfg.vad_horizons.len()
             )));
         };
-        let audio_pad = vec![lm.audio_pad_token(); cfg.n_q];
+        let pad = Tensor::from_vec(vec![lm.audio_pad_token() as i64], (1, 1), lm.device())?;
+        let audio_pad = vec![pad; cfg.n_q];
         Ok(Self { mimi, quantizer, lm, cfg, audio_pad, horizons })
     }
 
@@ -286,12 +288,8 @@ impl<Q: BackendQ> AsrModel<Q> {
         let dev = self.lm.device();
         let audio = Tensor::from_vec(pcm.to_vec(), (1, 1, FRAME_SIZE), dev)?;
         let latent = self.mimi.encode_to_latent_step(&audio, &mut state.enc)?;
-        let codes = self
-            .quantizer
-            .encode(&latent)?
-            .iter()
-            .map(|c| Ok(c.to_vec()?[0] as u32))
-            .collect::<Result<Vec<_>>>()?;
+        // `(1, 1)` each, and left on the device: the LM only looks them up in its embeddings.
+        let codes = self.quantizer.encode(&latent)?;
         // The first slice is dropped: the encoder has no history yet, so the model is handed
         // pad tokens instead.
         let audio_tokens = if state.steps == 0 { &self.audio_pad } else { &codes };
@@ -302,23 +300,31 @@ impl<Q: BackendQ> AsrModel<Q> {
             state.condition.as_ref(),
         )?;
         let logits = out.logits.reshape((1, self.cfg.text_card))?;
-        let token = xn::nn::sampling::gumbel_max(&logits, temperature, 1)?.to_vec()?[0] as u32;
+        let token = xn::nn::sampling::gumbel_max(&logits, temperature, 1)?;
         state.steps += 1;
+        // Queued before either readback, so the device runs it while the host waits for the
+        // token rather than after.
+        let vad_probs = match &self.lm.vad {
+            Some(readout) if state.steps > VAD_WARMUP_STEPS => Some(readout.probs(&out)?),
+            _ => None,
+        };
+        let token = token.to_vec()?[0] as u32;
         state.text_token = token;
 
-        let vad = match &self.lm.vad {
-            Some(readout) if state.steps > VAD_WARMUP_STEPS => {
-                let probs = readout.probs(&out)?;
+        let vad = match (&self.lm.vad, vad_probs) {
+            (Some(_), Some(probs)) => {
+                let classes = probs.dim(1usize)?;
+                let probs = probs.to_vec()?;
                 let stopped = self.cfg.vad_stopped_class;
                 self.horizons
                     .iter()
                     .map(|&(horizon_s, head)| VadPrediction {
                         horizon_s,
-                        inactivity_prob: probs[head][stopped],
+                        inactivity_prob: probs[head * classes + stopped].to_f32(),
                     })
                     .collect()
             }
-            Some(_) => self
+            (Some(_), None) => self
                 .horizons
                 .iter()
                 .map(|&(horizon_s, _)| VadPrediction {
@@ -326,7 +332,7 @@ impl<Q: BackendQ> AsrModel<Q> {
                     inactivity_prob: WARMUP_INACTIVITY,
                 })
                 .collect(),
-            None => vec![],
+            (None, _) => vec![],
         };
         // The decoder counts from the first silent frame; report the caller's audio time.
         let lead = INITIAL_SILENCE_FRAMES as f64 / FRAME_RATE;
@@ -356,6 +362,7 @@ trait AsrApi: Send + Sync {
     fn vad_horizons(&self) -> Vec<f64>;
     fn languages(&self) -> Vec<String>;
     fn model_ext(&self) -> Option<String>;
+    fn device_name(&self) -> String;
 }
 
 trait StreamApi: Send {
@@ -410,6 +417,11 @@ where
     fn model_ext(&self) -> Option<String> {
         self.model.cfg.model_ext()
     }
+
+    fn device_name(&self) -> String {
+        use xn::Backend as _;
+        self.model.lm.device().name()
+    }
 }
 
 impl<Q: BackendQ> StreamApi for StreamOf<Q>
@@ -456,6 +468,7 @@ impl Asr {
             mimi: mimi.into(),
             device: DeviceKind::Cpu,
             quant: Quant::F32,
+            dtype: None,
             temperature: 0.0,
         }
     }
@@ -490,6 +503,11 @@ impl Asr {
     pub fn model_ext(&self) -> Option<String> {
         self.0.model_ext()
     }
+
+    /// Name of the device the model runs on, e.g. `"cpu"` or `"cuda:0"`.
+    pub fn device_name(&self) -> String {
+        self.0.device_name()
+    }
 }
 
 impl AsrStream {
@@ -504,9 +522,46 @@ impl AsrStream {
     /// still in flight, and then drop it, without the live stream hearing that silence.
     ///
     /// Copies every cache (about 57 MB for `asr-67f06783.100`), which takes a few
-    /// milliseconds; the model weights are shared.
+    /// milliseconds on the CPU and about 0.2 ms on a desktop GPU; the model weights are shared.
     pub fn fork(&self) -> Result<AsrStream> {
         Ok(AsrStream(self.0.fork()?))
+    }
+}
+
+/// What the LM and its VAD readout compute in on a GPU. The Mimi encoder and the quantizer
+/// always run in f32, whatever the device.
+///
+/// The CPU computes in f32 only (its weight formats are [`AsrBuilder::quant`]'s business), so
+/// asking for anything else there is an error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dtype {
+    F32,
+    Bf16,
+    F16,
+}
+
+impl Dtype {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::Bf16 => "bf16",
+            Self::F16 => "f16",
+        }
+    }
+}
+
+impl std::str::FromStr for Dtype {
+    type Err = crate::Error;
+
+    fn from_str(name: &str) -> crate::Result<Self> {
+        match name.trim().to_lowercase().as_str() {
+            "f32" => Ok(Self::F32),
+            "bf16" => Ok(Self::Bf16),
+            "f16" => Ok(Self::F16),
+            _ => Err(Error::invalid_argument(format!(
+                "unsupported ASR dtype '{name}'; expected f32, bf16 or f16"
+            ))),
+        }
     }
 }
 
@@ -517,20 +572,29 @@ pub struct AsrBuilder {
     mimi: PathBuf,
     device: DeviceKind,
     quant: Quant,
+    dtype: Option<Dtype>,
     temperature: f32,
 }
 
 impl AsrBuilder {
-    /// Only [`DeviceKind::Cpu`] (and `Auto`, resolving to it) is supported for now.
+    /// The CPU (the default) or CUDA; [`DeviceKind::Auto`] takes CUDA when this build has it.
+    /// Vulkan and Metal are not supported.
     pub fn device(mut self, device: DeviceKind) -> Self {
         self.device = device;
         self
     }
 
     /// Weight format for the LM transformer linears, quantized at load time. Mimi and the
-    /// VAD readout stay f32.
+    /// VAD readout stay f32. Quantization is CPU-only.
     pub fn quant(mut self, quant: Quant) -> Self {
         self.quant = quant;
+        self
+    }
+
+    /// What the LM computes in on a GPU; see [`Dtype`]. Unset, the device's default: f32
+    /// everywhere.
+    pub fn dtype(mut self, dtype: Dtype) -> Self {
+        self.dtype = Some(dtype);
         self
     }
 
@@ -541,13 +605,26 @@ impl AsrBuilder {
     }
 
     pub fn build(self) -> Result<Asr> {
-        match self.device {
-            DeviceKind::Cpu | DeviceKind::Auto => {}
-            other => {
-                return Err(Error::unsupported(format!(
-                    "speech recognition runs on the CPU only, not {other:?}"
-                )));
-            }
+        let device = self.device.resolve();
+        self.quant.check_device(device)?;
+        match device {
+            DeviceKind::Cpu => self.build_cpu(),
+            DeviceKind::Cuda => self.build_cuda(),
+            other => Err(Error::unsupported(format!(
+                "speech recognition runs on the CPU or CUDA, not {other:?}"
+            ))),
+        }
+    }
+
+    fn build_cpu(self) -> Result<Asr> {
+        if let Some(dtype) = self.dtype
+            && dtype != Dtype::F32
+        {
+            return Err(Error::unsupported(format!(
+                "speech recognition computes in f32 on the CPU, not {}; quantize the weights \
+                 instead",
+                dtype.as_str()
+            )));
         }
         macro_rules! cpu {
             ($q:ty) => {
@@ -567,6 +644,30 @@ impl AsrBuilder {
             Quant::Q41 => cpu!(xn::quantized::Q41F32),
             Quant::Q4k => cpu!(xn::quantized::Q4kF32),
         }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn build_cuda(self) -> Result<Asr> {
+        // `check_device` keeps the weights unquantized off the CPU.
+        debug_assert_eq!(self.quant, Quant::F32);
+        let dev = xn::cuda_backend::Device::new(0)?;
+        // The codes are an argmin over codebook distances, and the tf32 convolutions xn uses
+        // for f32 by default move the Mimi latents enough to flip some of them: transcripts
+        // still matched the CPU's on our clips, but VAD probabilities drifted by up to 0.06.
+        // Full precision matches the CPU to 1e-4 and costs nothing measurable at one frame per
+        // step. The switch is process-wide, so a TTS in the same process decodes with
+        // full-precision convolutions too.
+        xn::cuda_backend::set_conv_reduced_precision_f32(false);
+        match self.dtype.unwrap_or(Dtype::F32) {
+            Dtype::F32 => self.load::<Unquantized<f32, _>>(dev),
+            Dtype::Bf16 => self.load::<Unquantized<half::bf16, _>>(dev),
+            Dtype::F16 => self.load::<Unquantized<half::f16, _>>(dev),
+        }
+    }
+
+    #[cfg(not(feature = "cuda"))]
+    fn build_cuda(self) -> Result<Asr> {
+        Err(Error::unsupported("this build has no CUDA support; rebuild with the `cuda` feature"))
     }
 
     fn load<Q: BackendQ>(self, dev: Q::B) -> Result<Asr>
@@ -646,21 +747,32 @@ mod tests {
         panic!("{} has no data chunk", path.display())
     }
 
-    /// Run with `cargo test --release -p ptts --features asr -- --ignored fork`.
+    /// Run with `cargo test --release -p ptts --features asr -- --ignored fork`. Set
+    /// `PTTS_TEST_ASR_DEVICE=cuda` (with the `cuda` feature) to run it on the GPU, and
+    /// optionally `PTTS_TEST_ASR_DTYPE`; on the CPU the weights are `q8_0`.
     #[test]
     #[ignore = "requires PTTS_TEST_ASR_MODEL (a speech-recognition checkpoint folder) and \
                 PTTS_TEST_ASR_AUDIO (24 kHz mono 16-bit WAV of speech)"]
     fn a_forked_stream_runs_independently_of_its_original() {
         let dir = std::path::PathBuf::from(std::env::var("PTTS_TEST_ASR_MODEL").unwrap());
         let audio = std::env::var("PTTS_TEST_ASR_AUDIO").unwrap();
-        let asr = Asr::builder(
+        let device: DeviceKind = match std::env::var("PTTS_TEST_ASR_DEVICE") {
+            Ok(name) => name.parse().unwrap(),
+            Err(_) => DeviceKind::Cpu,
+        };
+        let mut builder = Asr::builder(
             read_config(dir.join("config.json")).unwrap(),
             dir.join("model.safetensors"),
             dir.join("mimi.safetensors"),
         )
-        .quant(Quant::Q80)
-        .build()
-        .unwrap();
+        .device(device);
+        if device.resolve() == DeviceKind::Cpu {
+            builder = builder.quant(Quant::Q80);
+        }
+        if let Ok(dtype) = std::env::var("PTTS_TEST_ASR_DTYPE") {
+            builder = builder.dtype(dtype.parse().unwrap());
+        }
+        let asr = builder.build().unwrap();
         let mut pcm = read_wav_s16(std::path::Path::new(&audio));
         pcm.resize(pcm.len().div_ceil(FRAME_SIZE) * FRAME_SIZE, 0.0);
         let frames: Vec<&[f32]> = pcm.chunks(FRAME_SIZE).collect();
@@ -694,6 +806,30 @@ mod tests {
             assert_eq!(live.step(frame).unwrap(), expected[i], "live, frame {i}");
         }
         assert!(forks_with_words > 0, "the forks never flushed a word out");
+    }
+
+    #[test]
+    fn a_gpu_dtype_or_backend_the_asr_cannot_use_is_refused_before_loading() {
+        for name in ["f32", "bf16", "F16"] {
+            let dtype: Dtype = name.parse().unwrap();
+            assert_eq!(dtype.as_str(), name.to_lowercase());
+        }
+        assert!("q8".parse::<Dtype>().is_err());
+        let cfg: Config = serde_json::from_str(
+            r#"{"card":4,"n_q":2,"dim":8,"text_card":16,"num_heads":2,"num_layers":1,
+                "hidden_scale":4.0,"context":8,"max_period":10000,"asr_delay_in_tokens":2}"#,
+        )
+        .unwrap();
+        // None of these get as far as the (missing) weights.
+        let builder = || Asr::builder(cfg.clone(), "no/model.safetensors", "no/mimi.safetensors");
+        let refused = |r: Result<Asr>| matches!(r, Err(Error::Unsupported(_)));
+        assert!(refused(builder().dtype(Dtype::Bf16).build()));
+        assert!(refused(builder().device(DeviceKind::Metal).build()));
+        if cfg!(not(feature = "cuda")) {
+            assert!(refused(builder().device(DeviceKind::Cuda).build()));
+        }
+        assert!(refused(builder().device(DeviceKind::Cuda).quant(Quant::Q80).build()));
+        assert!(matches!(builder().build(), Err(Error::NotFound(_))));
     }
 
     #[test]

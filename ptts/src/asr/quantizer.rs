@@ -80,9 +80,8 @@ impl<T: WithDTypeF, B: Backend> Rvq<T, B> {
     /// per frame and dominated ASR on that backend.
     ///
     /// The loop itself is entirely on-device: `decode` consumes the index tensor
-    /// directly, so no value is needed on the host until the frame is finished.
-    /// Reading the codes then costs one flush, with the remaining reads landing
-    /// on work that has already completed.
+    /// directly, and so does the LM's embedding lookup, so the codes never need to
+    /// visit the host at all.
     fn encode(&self, xs: &Tensor<T, B>) -> Result<Vec<Tensor<i64, B>>> {
         let xs = xs.conv1d(&self.input_proj, None, 1, 0, 1, 1)?;
         // Work in (batch, steps, dim) so the codebook matmul needs no transposes.

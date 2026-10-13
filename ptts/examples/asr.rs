@@ -3,32 +3,41 @@
 //!
 //! ```text
 //! cargo run --release --example asr --features hf,audio,asr -- /path/to/asr-model audio.wav \
-//!     [--quant q8] [--lang en] [--vad] [--peek-every 0.5]
+//!     [--quant q8] [--device cuda] [--dtype bf16] [--lang en] [--vad] [--peek-every 0.5] \
+//!     [--dump steps.txt]
 //! ```
 //!
 //! The folder holds `config.json`, `model.safetensors`, `mimi.safetensors` and a
 //! `tokenizer.json` (convert a SentencePiece `tokenizer.model` with
-//! `scripts/convert-tokenizer.py`). `--vad` prints every step's probabilities.
+//! `scripts/convert-tokenizer.py`). `--vad` prints every step's probabilities. `--device`
+//! takes `cpu` (the default), `cuda` or `auto`, and `--dtype` what the LM computes in on a GPU.
 //!
 //! `--peek-every SECONDS` also peeks that often, as `/speech/asr`'s `peek` does: fork the
 //! stream, run the text delay out on silence on the fork, print the words still in flight
 //! and drop the fork. It reports what a peek costs and the real-time factor with and
 //! without them.
+//!
+//! `--dump FILE` writes every step's events and VAD probabilities at full precision, one line
+//! per step, for comparing two runs (devices, weight formats) exactly.
 
 use anyhow::Context as _;
 use ptts::Tokenizer as _;
 use ptts::asr::{Asr, Event, FRAME_RATE, FRAME_SIZE, SAMPLE_RATE, read_config};
-use ptts::synth::Quant;
+use ptts::synth::{DeviceKind, Quant};
 
 fn main() -> anyhow::Result<()> {
     let mut positional = vec![];
     let (mut quant, mut lang, mut print_vad, mut peek_every) = (Quant::F32, None, false, None);
+    let (mut device, mut dtype, mut dump) = (DeviceKind::Cpu, None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--quant" => quant = args.next().context("--quant takes a value")?.parse()?,
+            "--device" => device = args.next().context("--device takes a value")?.parse()?,
+            "--dtype" => dtype = Some(args.next().context("--dtype takes a value")?.parse()?),
             "--lang" => lang = Some(args.next().context("--lang takes a value")?),
             "--vad" => print_vad = true,
+            "--dump" => dump = Some(args.next().context("--dump takes a file")?),
             "--peek-every" => {
                 let s: f64 = args.next().context("--peek-every takes seconds")?.parse()?;
                 anyhow::ensure!(s > 0.0, "--peek-every must be positive");
@@ -39,22 +48,31 @@ fn main() -> anyhow::Result<()> {
     }
     let [dir, audio] = &positional[..] else {
         anyhow::bail!(
-            "usage: asr <model directory> <audio file> [--quant q8] [--lang en] [--vad] \
-             [--peek-every SECONDS]"
+            "usage: asr <model directory> <audio file> [--quant q8] [--device cuda] \
+             [--dtype bf16] [--lang en] [--vad] [--peek-every SECONDS] [--dump FILE]"
         )
     };
     let dir = std::path::Path::new(dir);
     let tok = ptts::tok::Tok::open(&dir.join("tokenizer.json"))?;
 
     let t0 = std::time::Instant::now();
-    let asr = Asr::builder(
+    let mut builder = Asr::builder(
         read_config(dir.join("config.json"))?,
         dir.join("model.safetensors"),
         dir.join("mimi.safetensors"),
     )
     .quant(quant)
-    .build()?;
-    println!("loaded in {:.1}s, VAD horizons {:?}", t0.elapsed().as_secs_f64(), asr.vad_horizons());
+    .device(device);
+    if let Some(dtype) = dtype {
+        builder = builder.dtype(dtype);
+    }
+    let asr = builder.build()?;
+    println!(
+        "loaded on {} in {:.1}s, VAD horizons {:?}",
+        asr.device_name(),
+        t0.elapsed().as_secs_f64(),
+        asr.vad_horizons()
+    );
 
     let mut pcm = ptts::audio::load_mono_at(std::path::Path::new(audio), SAMPLE_RATE as u32)?;
     let audio_frames = pcm.len().div_ceil(FRAME_SIZE);
@@ -65,6 +83,7 @@ fn main() -> anyhow::Result<()> {
     let mut words = vec![];
     let silence = vec![0f32; FRAME_SIZE];
     let (mut fork_s, mut drain_s, mut peeks) = (vec![], vec![], 0);
+    let mut dumped = String::new();
     let t0 = std::time::Instant::now();
     for (i, frame) in pcm.chunks(FRAME_SIZE).enumerate() {
         if let Some(every) = peek_every
@@ -90,6 +109,11 @@ fn main() -> anyhow::Result<()> {
             println!("{:6.2}s peek {:?}", i as f64 / FRAME_RATE, pending.join(" "));
         }
         let step = stream.step(frame)?;
+        if dump.is_some() {
+            use std::fmt::Write as _;
+            let probs: Vec<f32> = step.vad.iter().map(|v| v.inactivity_prob).collect();
+            writeln!(dumped, "{i} {probs:?} {:?}", step.events)?;
+        }
         let t = (i + 1) as f64 / FRAME_RATE;
         if print_vad && !step.vad.is_empty() {
             let probs: Vec<String> =
@@ -111,6 +135,9 @@ fn main() -> anyhow::Result<()> {
     let elapsed = t0.elapsed().as_secs_f64();
     let duration = pcm.len() as f64 / SAMPLE_RATE as f64;
     println!("transcript: {}", words.join(" "));
+    if let Some(path) = dump {
+        std::fs::write(&path, dumped).with_context(|| format!("cannot write {path}"))?;
+    }
     let peek_total: f64 = fork_s.iter().chain(&drain_s).sum();
     let live = elapsed - peek_total;
     println!(

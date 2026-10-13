@@ -50,7 +50,7 @@ Three things worth knowing before editing it:
 
 Cargo features that gate optional functionality:
 
-- `ptts`: `hf` enables `ptts::tok` for the JSON tokenizer; `audio` enables audio-file decoding and resampling for voice cloning; `asr` enables `ptts::asr`, streaming speech recognition (Mimi encoder, residual quantizer and the moshi-STT LM) with per-step VAD heads, CPU only. All three are optional for the library; the `asr` example needs `hf,audio,asr`. `cli` enables both plus argument parsing, blocking Hub transport, tracing, and Unix memory reporting for the command. `hf-hub` is an optional dependency enabled by `cli` and a development dependency for the examples. The library itself never downloads. Backend features include `cuda`, `accelerate`, and `kai` (see below).
+- `ptts`: `hf` enables `ptts::tok` for the JSON tokenizer; `audio` enables audio-file decoding and resampling for voice cloning; `asr` enables `ptts::asr`, streaming speech recognition (Mimi encoder, residual quantizer and the moshi-STT LM) with per-step VAD heads, on the CPU or (with `cuda`) the GPU. All three are optional for the library; the `asr` example needs `hf,audio,asr`. `cli` enables both plus argument parsing, blocking Hub transport, tracing, and Unix memory reporting for the command. `hf-hub` is an optional dependency enabled by `cli` and a development dependency for the examples. The library itself never downloads. Backend features include `cuda`, `accelerate`, and `kai` (see below).
 - `ptts-pyo3`: `cuda`, `accelerate`, `kai` (each forwards to both `xn/*` and `ptts/*`).
 
 `kai` runs the `q8_0` transformer linears through Arm KleidiAI's SME2 kernels, which `xn`
