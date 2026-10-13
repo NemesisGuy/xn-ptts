@@ -39,7 +39,7 @@ The first run downloads the default model and caches it. To run the runtime prev
 - **Small enough to ship:** Choose a 40M or 90M parameter model. Both can ship inside a mobile app or load in a browser tab.
 - **Five languages in one model:** Speak English, French, German, Spanish, and Portuguese, with more languages planned.
 - **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
-- **Voices ready to use or make your own:** Choose from ready-to-use voices, or bring Gradium's catalog, voice design and cloning to your device with [two scripts](#voices).
+- **Voices ready to use or make your own:** Choose from ready-to-use voices, or design or clone your own and bring it to your device with [two scripts](#voices).
 - **Control the delivery:** Adjust speaking speed and start playing streamed audio before the full utterance is ready.
 
 ## Performance
@@ -86,15 +86,15 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 
 ## Voices
 
-Each checkpoint comes with its own voices. You can also pick a voice from Gradium's catalog, design one from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio. The voice files work with every Phonon checkpoint.
+Each checkpoint comes with its own voices. You can also design a voice from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio. The voice files work with every Phonon checkpoint.
 
 ```sh
 export GRADIUM_API_KEY=...
 
-# List the catalog and your own voices, with their IDs
+# List your voices, with their IDs
 uv run scripts/download-voice.py --list
 
-# Download a voice by ID: from the catalog, or one you designed or cloned
+# Download a voice you designed or cloned, by ID
 uv run scripts/download-voice.py VOICE_ID -o voice.safetensors
 
 # Clone a voice from a recording; 10 seconds of clear speech are used

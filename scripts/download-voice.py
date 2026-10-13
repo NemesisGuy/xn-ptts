@@ -6,8 +6,8 @@
 # ///
 """Download a Gradium voice as a Phonon voice file.
 
-The voice can come from Gradium's catalog, or be one you designed or cloned in Gradium Studio
-or with clone-voice.py. Needs a Gradium API key in GRADIUM_API_KEY.
+The voice can be one you designed or cloned in Gradium Studio, or cloned with clone-voice.py.
+Needs a Gradium API key in GRADIUM_API_KEY.
 
     uv run scripts/download-voice.py --list
     uv run scripts/download-voice.py VOICE_ID -o voice.safetensors
@@ -41,7 +41,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("voice_id", nargs="?", help="the voice's ID, as --list or Gradium Studio shows it")
     p.add_argument("-o", "--out", type=Path, help="output file (default: VOICE_ID.safetensors)")
-    p.add_argument("--list", action="store_true", help="list the catalog and your own voices")
+    p.add_argument("--list", action="store_true", help="list your voices")
     args = p.parse_args()
     if not args.list and not args.voice_id:
         p.error("give a voice ID, or --list")
@@ -54,7 +54,7 @@ def main() -> None:
     s.hooks["response"] = check
 
     if args.list:
-        r = s.get(f"{API}/voices/", params={"include_catalog": "true", "limit": 0}, timeout=TIMEOUT)
+        r = s.get(f"{API}/voices/", params={"limit": 0}, timeout=TIMEOUT)
         for v in r.json():
             print(f"{v['uid']}  {v.get('language') or '--'}  {v['name']}: {v.get('description') or ''}")
         return
