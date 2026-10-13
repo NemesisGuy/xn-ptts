@@ -39,7 +39,7 @@ From the root of a checkout, with Rust installed (or use the copies you were giv
 
 ```bash
 ./ios/build-xcframework.sh                                                          # PhononCore.xcframework
-cargo run --release -p ptts --example export_coreml -- --model "$MODEL_DIR" phonon-coreml   # the model, as Core ML
+cargo run --release -p ptts --example export_coreml --features hub -- phonon-coreml   # the default model, as Core ML
 ```
 
 The first is the compiled core the package wraps, written into `ios/PhononTTS` where the package

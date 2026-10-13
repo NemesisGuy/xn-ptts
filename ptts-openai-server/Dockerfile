@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Build from the repository root. Supply a model folder or hf:// repo through PTTS_MODEL.
+# Build from the repository root. Serves the default model, or a model folder or hf:// repo set
+# through PTTS_MODEL.
 #   docker build -f ptts-openai-server/Dockerfile -t ptts-openai-server .
 
 FROM rust:1-bookworm AS build

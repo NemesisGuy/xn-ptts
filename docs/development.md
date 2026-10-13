@@ -70,9 +70,10 @@ npm install "/path/to/phonon-tts-VERSION.tgz"
 
 Use the tarball rather than a folder dependency so npm copies the files into the consumer project. Model files are served separately; the package contains no weights.
 
-To run the existing demo with your local checkpoint:
+To run the demo with the default model, or with your local checkpoint:
 
 ```sh
+make serve
 make serve MODEL_DIR="$MODEL_DIR"
 ```
 
@@ -84,10 +85,10 @@ On a Mac with Xcode 16 and the required Rust targets, build the core and export 
 
 ```sh
 ./ios/build-xcframework.sh
-cargo run --release -p ptts --example export_coreml -- --model "$MODEL_DIR" phonon-coreml
+cargo run --release -p ptts --example export_coreml --features hub -- phonon-coreml
 ```
 
-Add `ios/PhononTTS` to Xcode as a local package, select the `ptts` product, and add the exported `phonon-coreml` folder as a folder reference named `Models`. The module remains `PhononTTS`. Export conditions must match the checkpoint. [Swift guide](../ios/PhononTTS/README.md).
+Without `--model` it exports the default model; `--model "$MODEL_DIR"` exports a local checkpoint. Add `ios/PhononTTS` to Xcode as a local package, select the `ptts` product, and add the exported `phonon-coreml` folder as a folder reference named `Models`. The module remains `PhononTTS`. Export conditions must match the checkpoint. [Swift guide](../ios/PhononTTS/README.md).
 
 For ordinary app integration, the [published Swift archives](https://github.com/gradium-ai/xn-ptts/releases) include a package that downloads the compiled core. Custom checkpoint exports remain available.
 
@@ -97,12 +98,11 @@ From the repository root:
 
 ```sh
 docker build -f ptts-openai-server/Dockerfile -t ptts-openai-server:local .
-docker run --rm -p 127.0.0.1:8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+docker run --rm -p 127.0.0.1:8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   ptts-openai-server:local
 ```
 
-The image contains code, not weights. Hub loading, persistent cache volumes, formats, and admission limits are documented in the [server guide](../ptts-openai-server/README.md).
+The image contains code, not weights: it downloads the default model on first start. Mounting a model folder, persistent cache volumes, formats, and admission limits are documented in the [server guide](../ptts-openai-server/README.md).
 
 ## Rust
 

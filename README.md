@@ -28,13 +28,13 @@ The browser runs synthesis on your device; it downloads model files on first use
 
 ## Try it
 
-With [uv](https://docs.astral.sh/uv/) and a checkpoint folder, one line writes a WAV:
+With [uv](https://docs.astral.sh/uv/), one line writes a WAV:
 
 ```sh
-uvx ptts --model /path/to/model --lang en --quant q8 "Hello from Phonon." -o speech.wav
+uvx ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
-`--model` also takes a Hugging Face repo as `hf://OWNER/MODEL`. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) for the files a checkpoint needs.
+The first run downloads the default model and caches it. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) to use another model.
 
 ## What you get
 
@@ -52,14 +52,14 @@ uvx ptts --model /path/to/model --lang en --quant q8 "Hello from Phonon." -o spe
 
 | You want to… | Start here | What you need |
 |---|---|---|
-| Generate a speech file | [Command line](#command-line) | A desktop binary and a checkpoint. No Python or Rust required for a published binary. |
-| Add speech to a script or backend | [Python](#python) | A Python wheel and a checkpoint. |
-| Run speech in a web app | [Browser](#browser) | `phonon-tts` and model files served with your app. |
+| Generate a speech file | [Command line](#command-line) | A desktop binary. No Python or Rust required for a published binary. |
+| Add speech to a script or backend | [Python](#python) | A Python wheel. |
+| Run speech in a web app | [Browser](#browser) | `phonon-tts`. |
 | Add speech to an iPhone or Mac app | [Swift](#swift) | The `ptts` Swift package and a prepared Core ML bundle. |
 | Add speech to an Android app | [Android](#android) | A Kotlin AAR preview for supported Snapdragon NPUs, or the CPU native library. Source build and model files required. |
-| Give Home Assistant's voice assistant a local voice | [Home Assistant](ptts-openai-server/README.md#home-assistant) | Home Assistant and a checkpoint. No custom integration. |
-| Connect an existing app or self-host | [Docker and OpenAI-compatible API](#docker-and-openai-compatible-api) | Docker and a local checkpoint or HF repo. |
-| Embed the runtime in Rust | [Rust](#rust) | The `ptts` crate and a checkpoint folder. |
+| Give Home Assistant's voice assistant a local voice | [Home Assistant](ptts-openai-server/README.md#home-assistant) | Home Assistant. No custom integration. |
+| Connect an existing app or self-host | [Docker and OpenAI-compatible API](#docker-and-openai-compatible-api) | Docker. |
+| Embed the runtime in Rust | [Rust](#rust) | The `ptts` crate. |
 
 Phonon is the product and model identity. The Rust, Python, Swift, and planned Android Maven packages are named **`ptts`**; the browser npm package is **`phonon-tts`**. This repository remains `xn-ptts`. Swift apps use `import PhononTTS`.
 
@@ -75,7 +75,7 @@ Packages and native downloads are available as a runtime preview. Follow the [ru
 | Swift `ptts` | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | `ptts-swift-<version>.zip` and its matching compiled framework. [Swift guide](ios/PhononTTS/README.md). |
 | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
-| `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; model weights downloaded or mounted separately. [Server guide](ptts-openai-server/README.md). |
+| `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; it downloads the default model on first start, or mounts your own. [Server guide](ptts-openai-server/README.md). |
 | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. [Setup](ptts-openai-server/README.md#home-assistant). |
 | Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
@@ -83,9 +83,11 @@ Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs 
 
 ## Model setup
 
-Every integration needs an explicitly selected checkpoint. No model is chosen automatically.
+Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is currently [`hf://davencyw/pocket-tts-ptts`](https://huggingface.co/davencyw/pocket-tts-ptts), a test copy of Kyutai's [Pocket TTS](https://huggingface.co/kyutai/pocket-tts) (English, CC-BY-4.0), pinned to one commit. Swift and Android load a model bundle you add to the app.
 
-The local examples below use a q8 checkpoint folder supplied to you, for example:
+To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
+
+A checkpoint folder looks like this:
 
 ```text
 model/
@@ -95,7 +97,7 @@ model/
   default-voice.safetensors
 ```
 
-Voice files may instead live in `voices/` or `embeddings/`. Use the files and voice names your checkpoint supplies; do not substitute another model's tokenizer or config. The examples use q8 weights. For f32 weights, omit `--quant q8` or `quant="q8"`, use `Quant::F32` in Rust, and set `quant: 'f32'` with `weights: { f32: '/model/model.safetensors' }` in the browser.
+Voice files may instead live in `voices/` or `embeddings/`. Use the files and voice names your checkpoint supplies; do not substitute another model's tokenizer or config. The command line, Python and the servers load f32 weights unless given `--quant q8` or `quant="q8"`, which runs faster on the CPU; the browser loads q8 unless given `quant: 'f32'`.
 
 **Already received a model from us?** Extract it locally and use the matching integration below. You do not need a public Hugging Face repo or an HF token for local files. Runtime packages contain no model weights.
 
@@ -105,19 +107,11 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 | A prepared Core ML bundle | Swift. Add it to your app as `Models`, or host it for the Swift download API. A raw checkpoint needs [exporting first](ios/PhononTTS/README.md#1-build-the-two-pieces-that-are-not-in-the-source). |
 | A QNN bundle with `metadata.json` and compiled context binaries | Android NPU. It must match the phone's SoC and the package's QNN runtime. Older bundles may need their target metadata updated; see the [preview guide](qnn/android/README.md). A raw checkpoint needs exporting and compiling first. |
 
-For the shell examples below, set the folder once:
-
-```sh
-export MODEL_DIR=/absolute/path/to/model
-```
-
-The command line, Python and the servers can also load a checkpoint from Hugging Face, named `hf://OWNER/MODEL`. Add a commit, as `hf://OWNER/MODEL@COMMIT_SHA`, when you want a repeatable model version. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
-
 `lang` is required and selects **text normalization**, such as how numbers and symbols are spoken. Choose `en`, `fr`, `de`, `es`, `pt`, or `none` to pass text through unchanged. This setting does not establish which languages a checkpoint can speak.
 
 ## Quickstart
 
-These examples use the published runtime preview and a supplied checkpoint. Install the preview using the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1), or follow the [source setup](docs/development.md). The unversioned `uvx` and registry commands target the upcoming stable release.
+These examples use the published runtime preview and the default model. Install the preview using the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1), or follow the [source setup](docs/development.md). The unversioned `uvx` and registry commands target the upcoming stable release.
 
 ### Command line
 
@@ -127,7 +121,7 @@ These examples use the published runtime preview and a supplied checkpoint. Inst
 After the stable release, [uv](https://docs.astral.sh/uv/) can run the Python command in an isolated environment. For the current preview, use the command in the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1):
 
 ```sh
-uvx ptts --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
+uvx ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
 `uvx` manages the Python environment and dependencies.
@@ -138,24 +132,24 @@ On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew ta
 brew install gradium-ai/tap/ptts
 ```
 
-You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your `PATH`. Neither path needs Python or Rust. Generate a WAV with a supplied checkpoint:
+You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your `PATH`. Neither path needs Python or Rust. Generate a WAV:
 
 ```sh
-ptts --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
+ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
 The output is a mono 24 kHz WAV. Open it in your audio player.
 
 If you prefer Cargo, install the command with `cargo install ptts --locked --features cli` after the matching stable release is published.
 
-To download a checkpoint instead, replace the example repo and revision with your own:
+To use another model, pass a local folder or a Hugging Face repo, and `--quant q8` for faster q8 weights on the CPU:
 
 ```sh
 ptts --model hf://OWNER/MODEL@COMMIT_SHA --lang en --quant q8 \
   "Hello from Phonon." -o speech.wav
 ```
 
-Use `--voice NAME` to choose a voice; omitting it uses the checkpoint's default selection. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
+Use `--voice NAME` to choose a voice; omitting it uses the model's default selection. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
 
 </details>
 
@@ -173,10 +167,9 @@ python -m pip install ptts
 Then save speech in four lines:
 
 ```python
-import os
 import ptts
 
-tts = ptts.TTS(os.environ["MODEL_DIR"], lang="en", quant="q8")
+tts = ptts.TTS(lang="en")
 tts.save("speech.wav", "Hello from Phonon.")
 ```
 
@@ -189,13 +182,12 @@ with tts.stream("Speech can play while the rest is being generated.") as audio:
         print(pcm.shape)
 ```
 
-Leaving the `with` block stops generation and releases its workers. For Hub loading, pass `"hf://OWNER/MODEL@COMMIT_SHA"` as the model.
+Leaving the `with` block stops generation and releases its workers. To use another model, pass a local folder or `"hf://OWNER/MODEL@COMMIT_SHA"` as the first argument.
 
 The wheel also provides a command:
 
 ```sh
-python -m ptts --model "$MODEL_DIR" --lang en --quant q8 \
-  "Hello from Phonon." -o speech.wav
+python -m ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
 Rust and Python both install a command named `ptts`, with different flags. `python -m ptts` explicitly selects Python. [Python guide →](ptts-pyo3/README.md)
@@ -213,23 +205,16 @@ For the stable release, install the browser package into your web app. Current p
 npm install phonon-tts
 ```
 
-Serve the checkpoint's files under `/model/`, then generate a WAV:
+Then generate a WAV:
 
 ```js
 import { PhononTTS } from 'phonon-tts';
 
-const tts = await PhononTTS.load({
-  lang: 'en',
-  model: {
-    config: '/model/config.json',
-    tokenizer: '/model/tokenizer.json',
-    weights: { q8: '/model/model.q8.gguf' },
-    voices: { default: '/model/default-voice.safetensors' },
-  },
-});
-
+const tts = await PhononTTS.load({ lang: 'en' });
 const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 ```
+
+`model` picks another one: a public Hugging Face repo as `'hf://OWNER/MODEL@COMMIT_SHA'`, or the URLs of files you serve with your app.
 
 Use the returned `Blob` for a download link or your audio player. `tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the [browser guide](ptts-wasm/js/README.md#streaming) includes a complete Web Audio example. Call `tts.dispose()` when finished with the model.
 
@@ -303,13 +288,11 @@ Copy `android/jniLibs` into your app's `src/main/`, then add the Kotlin wrapper 
 <details>
 <summary>Show Docker and API quickstart</summary>
 
-Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) and replace `<release-version>` below, without the leading `v`. Public GHCR access is being finalized; until then use an image you can access or the [source setup](docs/development.md#docker). The Docker commands below use Bash or another POSIX shell. Mount your model folder and start the speech server:
+Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) and replace `<release-version>` below, without the leading `v`. Public GHCR access is being finalized; until then use an image you can access or the [source setup](docs/development.md#docker). The Docker commands below use Bash or another POSIX shell. Start the speech server, which downloads the default model on first start:
 
 ```sh
 PTTS_IMAGE="ghcr.io/gradium-ai/ptts-openai-server:<release-version>"
-docker run --rm -p 127.0.0.1:8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
-  "$PTTS_IMAGE"
+docker run --rm -p 127.0.0.1:8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 "$PTTS_IMAGE"
 ```
 
 In a second terminal:
@@ -321,9 +304,9 @@ curl http://localhost:8880/v1/audio/speech \
   -o speech.wav
 ```
 
-For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice your checkpoint supports. The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
+For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice the model has (`GET /v1/audio/voices` lists them). The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
 
-For HF acquisition and a cache that survives container replacement, use the [Hub Compose file](ptts-openai-server/compose.hub.yaml). Supply the repo, revision, and normalization language explicitly. The image contains no model weights. Deployment and access controls are in the [server guide →](ptts-openai-server/README.md).
+For a download cache that survives container replacement, use the [Hub Compose file](ptts-openai-server/compose.hub.yaml). Set `PTTS_MODEL` to serve another model: `hf://OWNER/MODEL@COMMIT_SHA`, or a folder mounted into the container. The image contains no model weights. Deployment and access controls are in the [server guide →](ptts-openai-server/README.md).
 
 </details>
 
@@ -335,19 +318,17 @@ For HF acquisition and a cache that survives container replacement, use the [Hub
 Add `ptts` with tokenizer support to your Rust project. This command targets the upcoming stable release; preview installation is in the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1), and source development can use a [path dependency](docs/development.md#rust):
 
 ```sh
-cargo add ptts --features hf
+cargo add ptts --features hf,hub
 ```
 
 ```rust
-use ptts::checkpoint::{Checkpoint, ResolveOptions};
+use ptts::checkpoint::{Checkpoint, DEFAULT_MODEL, ResolveOptions};
 use ptts::preprocess::Lang;
 use ptts::synth::{DeviceKind, Quant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let checkpoint = Checkpoint::resolve(
-        std::env::var("MODEL_DIR")?,
-        ResolveOptions { quant: Quant::Q80, weights: None },
-    )?;
+    let checkpoint =
+        Checkpoint::locate(DEFAULT_MODEL, ResolveOptions { quant: Quant::Q80, weights: None })?;
     let mut tts = checkpoint.builder(Lang::En).device(DeviceKind::Cpu).build()?;
     checkpoint.register_voices(&mut tts);
     let pcm = tts.say("Hello from Phonon.")?;
@@ -356,7 +337,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chunks for your own playback. The library reads local files; Hub acquisition belongs to the caller. [Rust API and small example →](ptts/README.md)
+Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chunks for your own playback. `Checkpoint::locate` also takes a local folder or `hf://OWNER/MODEL@COMMIT_SHA`. Without the `hub` feature the library never downloads, and reads local folders only. [Rust API and small example →](ptts/README.md)
 
 </details>
 

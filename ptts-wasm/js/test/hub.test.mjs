@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { parseHubModel, resolveHubModel } = await import('../hub.js');
+const { DEFAULT_MODEL, parseHubModel, resolveHubModel } = await import('../hub.js');
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const BASE = `https://huggingface.co/acme/speech/resolve/${SHA}`;
@@ -176,4 +176,12 @@ test('offline, the last answer from the Hub is used, so cached files still load'
 test('an answer that is not JSON names what was being looked up', async () => {
   globalThis.fetch = async () => new Response('<html>sign in to the network</html>', { status: 200 });
   await assert.rejects(resolveHubModel('hf://acme/speech'), /hf:\/\/acme\/speech: the Hub's answer is not JSON/);
+});
+
+test('the default model is the one the native frontends use, pinned to a commit', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const rust = await readFile(new URL('../../../ptts/src/checkpoint.rs', import.meta.url), 'utf8');
+  const native = /pub const DEFAULT_MODEL: &str =\s*"([^"]+)";/.exec(rust)?.[1];
+  assert.equal(DEFAULT_MODEL, native);
+  assert.match(parseHubModel(DEFAULT_MODEL).revision, /^[0-9a-f]{40}$/);
 });

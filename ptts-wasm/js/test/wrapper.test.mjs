@@ -108,10 +108,10 @@ test('threads is checked before the worker starts, handed to it, and reported ba
   assert.equal(FakeWorker.last.init.threads, 'auto');
 });
 
-test('model is required, with weights for the quant being loaded', async () => {
+test('a model needs its files, with weights for the quant being loaded', async () => {
   FakeWorker.last = null;
-  await assert.rejects(PhononTTS.load({ lang: 'en' }), /model is required/);
-  await assert.rejects(PhononTTS.load({ lang: 'en', model: [] }), /model is required/);
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: null }), /model must say where/);
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: [] }), /model must say where/);
   await assert.rejects(PhononTTS.load({ lang: 'en', model: { weights: { q8: 'w' } } }), /model\.tokenizer is required/);
   await assert.rejects(PhononTTS.load({ lang: 'en', model: MODEL, quant: 'f32' }), /no 'f32' weights/);
   // All of them fail before a worker exists, so nothing has been downloaded.
@@ -143,6 +143,21 @@ test('an hf:// model is resolved to URLs at its commit, after the other options 
   });
   assert.deepEqual(FakeWorker.last.init.preload, ['anna']);
   assert.deepEqual(tts.voices, ['anna']);
+  tts.dispose();
+});
+
+test('without a model, the default one is loaded from the Hub', async () => {
+  const { DEFAULT_MODEL } = await import('../index.js');
+  const [repo, revision] = DEFAULT_MODEL.slice('hf://'.length).split('@');
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(url);
+    const files = ['config.json', 'tokenizer.json', 'model.q8.gguf', 'embeddings/alba.safetensors'];
+    return Response.json({ sha: revision, siblings: files.map((rfilename) => ({ rfilename })) });
+  };
+  const tts = await PhononTTS.load({ lang: 'en', workerUrl: 'worker.js' });
+  assert.deepEqual(requests, [`https://huggingface.co/api/models/${repo}/revision/${revision}`]);
+  assert.equal(FakeWorker.last.init.model.config, `https://huggingface.co/${repo}/resolve/${revision}/config.json`);
   tts.dispose();
 });
 

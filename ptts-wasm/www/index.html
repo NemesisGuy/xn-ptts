@@ -86,10 +86,11 @@ tempSlider.addEventListener('input', () => {
   tempValue.textContent = tempSlider.value;
 });
 
-// `make demo` serves a model folder as `model/` and describes it in `model.json`: a static
-// server cannot list a directory, so the page cannot find the weights and voices itself.
-// Fetched before the module script below runs anything else, so the load button only
-// enables once the page knows what it would download.
+// `make demo MODEL_DIR=...` serves a model folder as `model/` and describes it in `model.json`:
+// a static server cannot list a directory, so the page cannot find the weights and voices
+// itself. Without `model.json` the page loads the package's default model. Fetched before the
+// module script below runs anything else, so the load button only enables once the page knows
+// what it would download.
 let demoModel = null;
 function updateLoadBtnLabel() {
   const bytes = demoModel?.sizes[quantSelect.value];
@@ -105,9 +106,12 @@ try {
   quantSelect.value = quants.includes('q8') ? 'q8' : quants[0];
   loadBtn.disabled = false;
   updateLoadBtnLabel();
-} catch (e) {
-  statusEl.textContent =
-    `No model to load (${e.message}). Serve the page with: make serve MODEL_DIR=/path/to/model`;
+} catch {
+  demoModel = null;
+  quantSelect.innerHTML = ['q8', 'f32'].map((q) => `<option value="${q}">${q}</option>`).join('');
+  quantSelect.value = 'q8';
+  loadBtn.disabled = false;
+  statusEl.textContent = 'Loads the default model from the Hugging Face Hub.';
 }
 
 function log(msg) {
@@ -256,7 +260,7 @@ async function loadWeights() {
       lang: LANG,
       quant: quantSelect.value,
       device: deviceSelect.value,
-      model: demoModel.model,
+      model: demoModel?.model,
       onProgress,
     });
   } catch (e) {

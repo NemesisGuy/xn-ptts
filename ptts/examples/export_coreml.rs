@@ -5,8 +5,8 @@
 //! the voices, and a `bundle.json` describing it all with every file's size and SHA-256.
 //!
 //! ```bash
+//! cargo run --release -p ptts --example export_coreml --features hub -- out/models
 //! cargo run --release -p ptts --example export_coreml -- --model path/to/checkpoint out/models
-//! cargo run --release -p ptts --example export_coreml --features hub -- --model hf://owner/name out/models
 //! ```
 //!
 //! The graphs are built for the Neural Engine: fp16, fully static shapes, and a KV cache the
@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 struct Args {
     /// Output directory.
     out: PathBuf,
-    #[arg(long, help = model_helpers::MODEL_HELP)]
+    #[arg(long, default_value = model_helpers::DEFAULT_MODEL, help = model_helpers::MODEL_HELP)]
     model: String,
     /// Weights file inside the repo or directory, when it has several.
     #[arg(long)]

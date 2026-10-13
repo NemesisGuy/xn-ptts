@@ -23,10 +23,10 @@ struct Args {
     #[arg(long, default_value = "1", value_parser = parse_request_limit)]
     max_concurrent_requests: std::num::NonZeroUsize,
 
-    /// Required. Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging
-    /// Face repo as `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision
-    /// to reproduce a release.
-    #[arg(long, alias = "config")]
+    /// Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging Face repo as
+    /// `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision to reproduce a
+    /// release. Defaults to the default model, downloaded from the Hub and cached on first use.
+    #[arg(long, alias = "config", default_value = ptts::checkpoint::DEFAULT_MODEL)]
     model: String,
 
     /// Optional directory of additional voice safetensors to load. Each

@@ -56,11 +56,11 @@ export interface LoadOptions {
   /** Default `'q8'`. */
   quant?: Quant;
   /**
-   * Required. Where the checkpoint's files are, or a public Hugging Face repo as
-   * `'hf://owner/name'` or `'hf://owner/name@revision'`, whose files are picked as the native
-   * frontends pick them. There is no default: pass the model you mean.
+   * Where the checkpoint's files are, or a public Hugging Face repo as `'hf://owner/name'` or
+   * `'hf://owner/name@revision'`, whose files are picked as the native frontends pick them.
+   * Default: {@link DEFAULT_MODEL}.
    */
-  model: ModelSpec | string;
+  model?: ModelSpec | string;
   /** Voices to fetch up front. Default: just the default voice; others load on first use. */
   voices?: string[];
   /** Keep downloads in the Cache API, so the model is fetched once per browser. Default `true`. */
@@ -186,6 +186,9 @@ export declare class PhononTTS {
 
 /** Delete every file this package has cached. Resolves to whether there was anything. */
 export declare function clearCache(): Promise<boolean>;
+
+/** The model `PhononTTS.load` uses when none is given, as `hf://owner/name@revision`. */
+export declare const DEFAULT_MODEL: string;
 
 /** Encode mono float PCM as a 16-bit WAV file. */
 export declare function encodeWav(pcm: Float32Array, sampleRate: number): Blob;

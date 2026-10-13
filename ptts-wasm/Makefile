@@ -77,15 +77,18 @@ check-threads-toolchain:
 threads-toolchain:
 	rustup toolchain install $(THREADS_TOOLCHAIN) --profile minimal --component rust-src --target wasm32-unknown-unknown
 
-# The demo page, using the package exactly as a consumer would, in site/. MODEL_DIR is the
-# model folder to serve beside it; the page loads whatever weights and voices it holds.
+# The demo page, using the package exactly as a consumer would, in site/. MODEL_DIR, if set,
+# is a model folder to serve beside it, and the page loads whatever weights and voices it holds;
+# without it, the page loads the package's default model from the Hugging Face Hub.
 demo: check-model-dir build
 	rm -rf site
 	mkdir -p site
 	cp -r pkg site/phonon-tts
 	cp www/index.html site/
-	ln -s "$(abspath $(MODEL_DIR))" site/model
-	node scripts/demo-model.mjs site/model > site/model.json
+	if [ -n "$(MODEL_DIR)" ]; then \
+	  ln -s "$(abspath $(MODEL_DIR))" site/model && \
+	  node scripts/demo-model.mjs site/model > site/model.json; \
+	fi
 
 # Cross-origin isolated, so the demo runs on the threaded build.
 serve: demo
@@ -93,9 +96,9 @@ serve: demo
 
 # Checked before the build, so a missing folder fails in a second rather than after it.
 check-model-dir:
-	@if [ -z "$(MODEL_DIR)" ] || [ ! -f "$(MODEL_DIR)/tokenizer.json" ]; then \
-	  echo "make demo and make serve need MODEL_DIR, a model folder holding tokenizer.json, the"; \
-	  echo "weights and its voices: make serve MODEL_DIR=/path/to/model"; \
+	@if [ -n "$(MODEL_DIR)" ] && [ ! -f "$(MODEL_DIR)/tokenizer.json" ]; then \
+	  echo "MODEL_DIR must be a model folder holding tokenizer.json, the weights and its"; \
+	  echo "voices, or unset for the default model: make serve MODEL_DIR=/path/to/model"; \
 	  exit 1; \
 	fi
 

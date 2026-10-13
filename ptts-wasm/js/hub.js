@@ -7,6 +7,12 @@ import { openCache } from './fetch.js';
 
 const HUB = 'https://huggingface.co';
 
+/**
+ * The model `PhononTTS.load` uses when none is given, pinned to a commit. A copy of
+ * `DEFAULT_MODEL` in `ptts/src/checkpoint.rs`; the tests hold the two together.
+ */
+export const DEFAULT_MODEL = 'hf://davencyw/pocket-tts-ptts@7cc3c90b88f3e6617ded1b9b74100d1cd0162d90';
+
 /** Weights per quant, in the order the native `weight_candidates` tries them. */
 const WEIGHTS = {
   q8: ['model.q8.gguf', 'model.safetensors'],

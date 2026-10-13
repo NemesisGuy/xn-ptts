@@ -40,7 +40,13 @@ struct Args {
     #[arg(short, long, default_value_t = 4242424242424242)]
     seed: u64,
 
-    #[arg(short, long, alias = "dir", help = model_helpers::MODEL_HELP)]
+    #[arg(
+        short,
+        long,
+        alias = "dir",
+        default_value = model_helpers::DEFAULT_MODEL,
+        help = model_helpers::MODEL_HELP
+    )]
     model: String,
 
     /// JSONL voice catalog to register, one `{"name", "filename"}` object per line with
@@ -276,10 +282,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_model_source_is_required_before_loading() {
-        let err = Args::try_parse_from(["ptts", "--lang", "en", "hello"]).unwrap_err();
-        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
-        assert!(err.to_string().contains("--model"));
+    fn without_a_model_the_default_loads() {
+        let args = Args::try_parse_from(["ptts", "--lang", "en", "hello"]).unwrap();
+        assert_eq!(args.model, model_helpers::DEFAULT_MODEL);
     }
 
     #[test]
