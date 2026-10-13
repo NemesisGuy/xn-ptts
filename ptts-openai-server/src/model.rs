@@ -6,6 +6,7 @@
 //!
 //! Local artifact resolution is shared in `ptts::checkpoint`.
 
+use crate::compat::{Aliases, Compat};
 use anyhow::{Context as _, Result};
 use ptts::checkpoint::{
     Checkpoint, ResolveOptions, is_local_source, read_config, weight_candidates,
@@ -28,6 +29,10 @@ pub struct Inner {
     /// How text is normalized. Wyoming lists the voices in its language.
     pub normalize: Normalize,
     pub voices: Vec<String>,
+    /// Other names requests may give for those voices.
+    pub aliases: Aliases,
+    /// Accept a `speed` other than 1 and speak at the normal rate.
+    pub ignore_speed: bool,
     pub seed_base: u64,
     pub sample_rate: u32,
     pub frame_size: u32,
@@ -99,6 +104,7 @@ pub async fn load_ptts(
     normalize: Normalize,
     conditions: &[(String, String)],
     max_concurrent_requests: std::num::NonZeroUsize,
+    compat: &Compat,
 ) -> Result<AppState> {
     anyhow::ensure!(
         max_concurrent_requests.get() <= tokio::sync::Semaphore::MAX_PERMITS,
@@ -150,6 +156,7 @@ pub async fn load_ptts(
 
     let voices = synth.voices();
     let default_voice = synth.default_voice().context("no voice embeddings found in model")?;
+    let aliases = Aliases::new(compat, &voices)?;
     let sample_rate = synth.sample_rate();
     let frame_size = (sample_rate as f64 / frame_rate).round() as u32;
     tracing::info!(
@@ -168,6 +175,8 @@ pub async fn load_ptts(
         model_url,
         normalize,
         voices,
+        aliases,
+        ignore_speed: compat.ignore_speed,
         seed_base,
         sample_rate,
         frame_size,
@@ -205,6 +214,7 @@ mod checkpoint_tests {
             Normalize::OFF,
             &[],
             std::num::NonZeroUsize::new(1).unwrap(),
+            &Default::default(),
         )
         .await;
         std::fs::remove_dir_all(extra_dir).unwrap();

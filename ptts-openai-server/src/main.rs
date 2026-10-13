@@ -1,4 +1,5 @@
 mod api;
+mod compat;
 mod encoder;
 mod model;
 mod mp3;
@@ -82,6 +83,29 @@ struct Args {
         value_delimiter = ','
     )]
     conditions: Vec<String>,
+
+    /// Accept another name for a voice, as `ALIAS=VOICE`, for clients that only offer a fixed
+    /// list of names; repeatable. VOICE is a voice of this server or `default`. Off when not
+    /// set: an unknown voice is an error. In the environment, a comma-separated list.
+    #[arg(
+        long = "voice-alias",
+        value_name = "ALIAS=VOICE",
+        env = "PTTS_VOICE_ALIAS",
+        value_delimiter = ','
+    )]
+    voice_aliases: Vec<String>,
+
+    /// Accept each of OpenAI's own voice names, such as `alloy`, as this voice, or `default` for
+    /// the default voice. For clients that only offer those names. A `--voice-alias` for one of
+    /// them wins. Off when not set.
+    #[arg(long, value_name = "VOICE", env = "PTTS_OPENAI_VOICES")]
+    openai_voices: Option<String>,
+
+    /// Accept a `speed` other than 1, up to OpenAI's range of 0.25 to 4, and ignore it: the
+    /// model has no rate control, so speech is always at the normal rate. For clients that
+    /// always send a speed. Without it, such a request is an error.
+    #[arg(long, env = "PTTS_IGNORE_SPEED")]
+    ignore_speed: bool,
 }
 
 fn parse_request_limit(value: &str) -> Result<std::num::NonZeroUsize, String> {
@@ -173,6 +197,12 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
         normalize,
         &conditions,
         args.max_concurrent_requests,
+        &compat::Compat {
+            voice_aliases: args.voice_aliases.clone(),
+            // Compose files pass `PTTS_OPENAI_VOICES=` for none.
+            openai_voices: args.openai_voices.clone().filter(|v| !v.is_empty()),
+            ignore_speed: args.ignore_speed,
+        },
     )
     .await
 }

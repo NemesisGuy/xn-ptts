@@ -75,19 +75,39 @@ client.audio.speech.create(model="tts-1", voice="default", input="Hello.").write
 | Field | What the server does |
 |---|---|
 | `input` | Required, up to 4096 characters. Long text is split at sentence ends. |
-| `voice` | A voice of this checkpoint, in any case (`GET /v1/audio/voices` lists them), or `default`, which is also what a missing `voice` means. OpenAI's own names such as `alloy` are a 400. |
+| `voice` | A voice of this checkpoint, in any case (`GET /v1/audio/voices` lists them), or `default`, which is also what a missing `voice` means. Any other name, such as OpenAI's own `alloy`, is a 400 unless it is set as an [alias](#openai-clients). |
 | `response_format` | `mp3` (the default), `opus`, `wav` or `pcm` (headerless 16-bit mono at 24 kHz). `aac` and `flac` are a 400. |
-| `speed` | Only `1.0`: the model has no rate control yet, so other values are a 400. |
+| `speed` | Only `1.0`: the model has no rate control yet, so other values are a 400. With `--ignore-speed`, any value from `0.25` to `4.0` is accepted and ignored. Values outside that range are always a 400. |
 | `model`, `instructions`, `stream_format` | Accepted and ignored. The reply is always the audio bytes, streamed as they are generated. |
 
-Errors use OpenAI's shape, `{"error": {"message", "type", "param", "code"}}`, so client SDKs report them as usual. `GET /v1/models` names the loaded checkpoint and lists the `languages` its config declares, and `GET /health` answers `{"status": "ok"}`. There is no authentication: an `Authorization` header is ignored. A failure after the audio has started can only cut the response short. Audio buffering is bounded through the model workers and HTTP response. A slow reader pauses generation; closing the response cancels generation and releases its workers. A client that stops reading for 30 seconds has its response ended and its slot freed. A streamed `wav` has no length in its header, which a few strict parsers reject; `mp3` or `pcm` suit those.
+Errors use OpenAI's shape, `{"error": {"message", "type", "param", "code"}}`, so client SDKs report them as usual. `GET /v1/models` names the loaded checkpoint and lists the `languages` its config declares. `GET /v1/audio/voices` answers `{"voices": [...], "aliases": {"alias": "voice"}}`: aliases are not in `voices`, so a client that offers that list offers only real voices. `GET /health` answers `{"status": "ok"}`. There is no authentication: an `Authorization` header is ignored. A failure after the audio has started can only cut the response short. Audio buffering is bounded through the model workers and HTTP response. A slow reader pauses generation; closing the response cancels generation and releases its workers. A client that stops reading for 30 seconds has its response ended and its slot freed. A streamed `wav` has no length in its header, which a few strict parsers reject; `mp3` or `pcm` suit those.
+
+## OpenAI clients
+
+Some clients only offer OpenAI's own voice names, such as `alloy` or `nova`, and some always send a `speed`. By default the server rejects both, so a mistake is not hidden. Two settings make such clients work, and both are off unless set:
+
+- `--openai-voices VOICE` (`PTTS_OPENAI_VOICES`) accepts every OpenAI voice name as `VOICE`, a voice of this server or `default`. A checkpoint voice with the same name as an OpenAI voice keeps its own name.
+- `--voice-alias ALIAS=VOICE` (`PTTS_VOICE_ALIAS`, comma-separated) adds one name; repeatable. It wins over `--openai-voices` for the same name. An alias cannot be the name of a voice, and a voice it names must exist, or the server does not start.
+- `--ignore-speed` (`PTTS_IGNORE_SPEED=true`) accepts a `speed` from `0.25` to `4.0` and speaks at the normal rate.
+
+Aliases match in any case, like voice names. A name that is neither a voice nor an alias is still a 400. With Docker:
+
+```bash
+docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
+  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_OPENAI_VOICES=default -e PTTS_VOICE_ALIAS=nova=VOICE \
+  -e PTTS_IGNORE_SPEED=true \
+  ghcr.io/gradium-ai/ptts-openai-server
+```
+
+Here every OpenAI voice is the default voice, except `nova`, which is `VOICE`, one of `GET /v1/audio/voices`.
 
 ## Clients
 
 - **Open WebUI:** Admin Settings, Audio, Text-to-Speech engine `OpenAI`, API base URL `http://<host>:8880/v1`, any API key. Set the voice to `default` or a voice from `/v1/audio/voices`.
 - **Home Assistant:** use the [Wyoming protocol](#home-assistant), which needs no custom integration. The [sfortis/openai_tts](https://github.com/sfortis/openai_tts) integration also works: Custom endpoint, URL `http://<host>:8880/v1/audio/speech`, model `tts-1`. The voice list is read from `/v1/audio/voices`.
 - **LiveKit Agents:** `openai.TTS(base_url="http://<host>:8880/v1", api_key="unused", model="tts-1", voice="default")`.
-- **SillyTavern:** TTS provider "OpenAI Compatible", endpoint `http://<host>:8880/v1/audio/speech`, voices `default` or the checkpoint's own. Leave the speed at 1.
+- **SillyTavern:** TTS provider "OpenAI Compatible", endpoint `http://<host>:8880/v1/audio/speech`, voices `default` or the checkpoint's own. Leave the speed at 1, or start the server with `--ignore-speed`.
 
 ## Home Assistant
 
@@ -105,4 +125,5 @@ Then, in Home Assistant, add the **Wyoming Protocol** integration with this mach
 - **Language.** Every voice is listed in the `--lang` language, which must not be `none`: Home Assistant names a voice in each request but never a language. For a second language, run a second server.
 - **Streaming.** Home Assistant sends an assistant's reply while it is still being written. The server speaks it a sentence at a time, so speech starts with the first sentence, not after the last.
 - **Busy server.** Wyoming requests share the HTTP API's `--max-concurrent-requests` slots. They wait for a free slot instead of failing.
+- **Voices.** Home Assistant offers the voices the server lists, so [aliases](#openai-clients) apply to the HTTP API only.
 - **Access.** Like the HTTP API, the Wyoming port has no authentication. Publish it only on a network you trust.
