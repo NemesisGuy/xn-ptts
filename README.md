@@ -46,7 +46,7 @@ The first run downloads the default model and caches it. To run the runtime prev
 
 Three model sizes, one inference stack. Each cell is how many seconds of audio Phonon makes per
 second of compute (higher is faster; above 1× is faster than real time) and the time to first
-byte (TTFB).
+byte (TTFB). CPU rows use a single core; the Metal and Neural Engine rows run on the accelerator.
 
 | Device | 31M | 56M | 98M |
 |---|---|---|---|
