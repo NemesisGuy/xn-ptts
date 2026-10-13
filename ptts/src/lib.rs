@@ -40,6 +40,7 @@
 //! | [`preprocess`] | Per-language text normalization, applied before tokenizing. |
 //! | [`tok`] | The Hugging Face tokenizer, behind the `hf` feature. |
 //! | [`audio`] | Decoding and resampling audio files for voice cloning, behind `audio`. |
+//! | `asr` | Streaming speech recognition with voice activity, behind `asr`. |
 //! | [`tts_model`] | [`tts_model::TTSModel`], the streaming primitives `synth` drives. |
 //! | [`flow_lm`], [`transformer`] | The token-conditioned flow-matching LM. |
 //! | [`mimi`] | The neural audio codec. |
@@ -72,6 +73,8 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(feature = "asr")]
+pub mod asr;
 #[cfg(feature = "audio")]
 pub mod audio;
 #[cfg(not(target_arch = "wasm32"))]

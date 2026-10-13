@@ -4,11 +4,11 @@
 //! frame at a time, keeping its streaming state in [`MimiDecoderState`]. [`MimiEncoder`] goes
 //! the other way and is used only to embed a voice prompt from audio.
 
-use crate::conv::StreamingConvTr1dState;
 use crate::conv::pad_for_conv1d;
+use crate::conv::{StreamingConv1dState, StreamingConvTr1dState};
 use crate::dummy_quantizer::DummyQuantizer;
 use crate::resample::{ConvDownsample1d, ConvTrUpsample1d};
-use crate::seanet::{SEANetDecoder, SEANetDecoderState, SEANetEncoder};
+use crate::seanet::{SEANetDecoder, SEANetDecoderState, SEANetEncoder, SEANetEncoderState};
 use crate::transformer::{ProjectedTransformer, StreamingTransformerState};
 use xn::nn::var_builder::Path;
 use xn::{Backend, BackendQ, Result, Tensor, WithDTypeF};
@@ -55,6 +55,15 @@ pub struct MimiDecoder<Q: BackendQ> {
     pub(crate) quantizer: DummyQuantizer<Q::T, Q::B>,
     pub sample_rate: usize,
     pub frame_rate: f64,
+}
+
+/// Streaming state of [`MimiEncoder::encode_to_latent_step`], for callers that encode audio as
+/// it arrives (the speech recognizer) rather than all at once.
+#[derive(Debug, Clone)]
+pub struct MimiEncoderState<T: WithDTypeF, B: Backend> {
+    encoder_state: SEANetEncoderState<T, B>,
+    encoder_transformer_state: StreamingTransformerState<T, B>,
+    downsample_state: Option<StreamingConv1dState<T, B>>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +138,42 @@ impl<Q: BackendQ> MimiEncoder<Q> {
             Some(ds) => ds.forward_no_state(&emb),
             None => Ok(emb),
         }
+    }
+
+    /// A fresh streaming state for [`Self::encode_to_latent_step`].
+    pub fn init_state(&self, batch_size: usize) -> Result<MimiEncoderState<Q::T, Q::B>> {
+        let downsample_state = match &self.downsample {
+            Some(ds) => Some(ds.init_state(batch_size)?),
+            None => None,
+        };
+        Ok(MimiEncoderState {
+            encoder_state: self.encoder.init_state(batch_size)?,
+            // The Mimi transformer keeps a fixed-context KV cache, so no sequence budget.
+            encoder_transformer_state: self.encoder_transformer.init_state(batch_size, 0)?,
+            downsample_state,
+        })
+    }
+
+    /// Encode audio to latent (streaming). `x` is `[B, C, T]` with `T` a multiple of
+    /// [`Self::frame_size`]; returns `[B, C', T / frame_size]`.
+    pub fn encode_to_latent_step(
+        &self,
+        x: &Tensor<Q::T, Q::B>,
+        state: &mut MimiEncoderState<Q::T, Q::B>,
+    ) -> Result<Tensor<Q::T, Q::B>> {
+        let emb = self.encoder.forward(x, &mut state.encoder_state)?;
+        let mut outs =
+            self.encoder_transformer.forward(&emb, &mut state.encoder_transformer_state)?;
+        let emb = outs.swap_remove(0);
+        match (&self.downsample, &mut state.downsample_state) {
+            (Some(ds), Some(ds_state)) => ds.forward(&emb, ds_state),
+            _ => Ok(emb),
+        }
+    }
+
+    /// Audio samples per latent frame.
+    pub fn frame_size(&self) -> usize {
+        self.frame_size
     }
 }
 

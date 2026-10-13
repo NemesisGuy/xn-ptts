@@ -52,7 +52,7 @@ libc = { workspace = true }
 # `all-features`: that turns on `cuda`, whose build script needs `nvcc`. The `docs` CI job
 # builds this same set, so a docs.rs failure shows up on the PR instead of after publishing.
 [package.metadata.docs.rs]
-features = ["hf", "audio"]
+features = ["hf", "audio", "asr"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
@@ -70,6 +70,8 @@ kai = ["xn/kai"]
 hf = ["dep:tokenizers"]
 # Decoding and resampling audio files (`ptts::audio`), for voice cloning.
 audio = ["dep:symphonia", "dep:rubato"]
+# Streaming speech recognition with per-step voice activity (`ptts::asr`).
+asr = []
 
 [[example]]
 name = "say"
@@ -93,3 +95,7 @@ required-features = ["audio"]
 
 [[example]]
 name = "export_coreml"
+
+[[example]]
+name = "asr"
+required-features = ["hf", "audio", "asr"]

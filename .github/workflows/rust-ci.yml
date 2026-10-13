@@ -97,7 +97,7 @@ jobs:
       # the two `cdylib` crates only produces "doc tests are not supported for crate type(s)
       # `cdylib`" warnings.
       - name: Doctests
-        run: cargo test -p ptts --doc && cargo test -p ptts --features hf,audio --doc
+        run: cargo test -p ptts --doc && cargo test -p ptts --features hf,audio,asr --doc
         shell: bash
       # Features that only build on this platform's SDK, or need an arm64 runner like `kai`.
       - name: macOS and arm64 features compile
@@ -127,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for features in "" hf audio hf,audio cli; do
+          for features in "" hf audio hf,audio asr cli; do
             echo "::group::ptts --features ${features:-<none>}"
             cargo check -p ptts --no-default-features --features "$features" --all-targets
             echo "::endgroup::"
@@ -176,14 +176,14 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs -D warnings
         # `+nightly` explicitly: the stable toolchain installed above is the default by then.
-        run: cargo +nightly doc -p ptts --no-deps --features hf,audio
+        run: cargo +nightly doc -p ptts --no-deps --features hf,audio,asr
 
       # Stable has no `docsrs` cfg and so no `feature(doc_cfg)`; this is what a contributor
       # running `cargo doc` gets, and it has to stay clean too.
       - name: And as a contributor will
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo +stable doc -p ptts --no-deps --features hf,audio
+        run: cargo +stable doc -p ptts --no-deps --features hf,audio,asr
 
   wasm:
     name: Wasm
