@@ -114,7 +114,7 @@ fn main() -> Result<()> {
     // Voices may hold speaker-Mimi latents rather than ready-to-use embeddings, projected with
     // the same checkpoint weight the Rust runtime uses when adding a voice.
     let speaker_proj = ptts::loader::load_speaker_proj(&vb, cfg)?;
-    let model_ext = cfg.model_ext();
+    let embeddings_ext = cfg.embeddings_ext.as_deref();
 
     // What the flow LM adds to every frame's input, `D` wide: the checkpoint's conditioners
     // summed, at the values given and their defaults for the rest. Zeros without any.
@@ -141,7 +141,7 @@ fn main() -> Result<()> {
         for (name, path) in files {
             let emb = ptts::loader::load_voice_emb(
                 &path,
-                model_ext.as_deref(),
+                embeddings_ext,
                 speaker_proj.as_ref(),
                 &xn::CpuDevice,
             )
