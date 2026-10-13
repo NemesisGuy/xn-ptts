@@ -4,10 +4,14 @@ services:
     image: "${PTTS_IMAGE:-ghcr.io/gradium-ai/ptts-openai-server:latest}"
     ports:
       - "8880:8880"
+      # For Home Assistant, with PTTS_WYOMING_ADDR below.
+      # - "10200:10200"
     environment:
       PTTS_CONFIG: /models
       PTTS_LANG: en
       PTTS_QUANT: q8
+      # Serve the Wyoming protocol, which Home Assistant uses, as well as the OpenAI API.
+      # PTTS_WYOMING_ADDR: 0.0.0.0:10200
       # Voices of your own, made with the `create_voice` example, from the folder mounted below.
       # PTTS_VOICE_DIR: /voices
     volumes:

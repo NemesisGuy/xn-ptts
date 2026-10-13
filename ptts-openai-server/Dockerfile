@@ -11,13 +11,24 @@ WORKDIR /src
 COPY . .
 # `.cargo/config.toml` is left out of the build context (see Dockerfile.dockerignore), so nothing
 # pins `target-cpu=native`. x86_64 gets x86-64-v3, as the Python wheels do: `xn` picks its
-# quantized kernels at compile time, and a lower baseline would cost q8 its AVX kernels.
+# quantized kernels at compile time, and a lower baseline would cost q8 its AVX kernels. Many
+# small home servers have no AVX2, so it also gets an x86-64-v2 build, and `select-cpu.sh`
+# starts whichever one the CPU can run.
 ARG TARGETARCH
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target,sharing=locked \
-    if [ "$TARGETARCH" = "amd64" ]; then export RUSTFLAGS="-C target-cpu=x86-64-v3"; fi \
-    && cargo build --release --locked -p ptts-openai-server \
-    && cp target/release/ptts-openai-server /usr/local/bin/
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        for level in v3 v2; do \
+            RUSTFLAGS="-C target-cpu=x86-64-$level" cargo build --release --locked \
+                -p ptts-openai-server --target-dir "target/x86-64-$level" \
+            && install -D "target/x86-64-$level/release/ptts-openai-server" \
+                "/out/libexec/ptts/ptts-openai-server-x86-64-$level" || exit 1; \
+        done \
+        && install -D ptts-openai-server/select-cpu.sh /out/bin/ptts-openai-server; \
+    else \
+        cargo build --release --locked -p ptts-openai-server \
+        && install -D target/release/ptts-openai-server /out/bin/ptts-openai-server; \
+    fi
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -25,7 +36,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 phonon \
     && install -d -o phonon -g phonon /home/phonon/.cache /home/phonon/.cache/huggingface
-COPY --from=build /usr/local/bin/ptts-openai-server /usr/local/bin/
+COPY --from=build /out/ /usr/local/
 LABEL org.opencontainers.image.source="https://github.com/gradium-ai/xn-ptts" \
       org.opencontainers.image.description="OpenAI-compatible text-to-speech server for Phonon"
 USER phonon
@@ -35,5 +46,6 @@ USER phonon
 ENV HF_HOME=/home/phonon/.cache/huggingface \
     PTTS_LANG=en \
     PTTS_QUANT=q8
-EXPOSE 8880
+# 10200 is the Wyoming protocol, served only when PTTS_WYOMING_ADDR is set.
+EXPOSE 8880 10200
 ENTRYPOINT ["ptts-openai-server"]

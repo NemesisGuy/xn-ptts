@@ -23,6 +23,10 @@ pub struct Inner {
     pub requests: Arc<tokio::sync::Semaphore>,
     /// The checkpoint that loaded: its repo id, or for a local config the name of its folder.
     pub model_name: String,
+    /// Where the checkpoint is from: its Hub page, or this repository for a local folder.
+    pub model_url: String,
+    /// How text is normalized. Wyoming lists the voices in its language.
+    pub normalize: Normalize,
     pub voices: Vec<String>,
     pub seed_base: u64,
     pub sample_rate: u32,
@@ -102,7 +106,7 @@ pub async fn load_ptts(
         tokio::sync::Semaphore::MAX_PERMITS
     );
     quant.check_device(device)?;
-    let (m, model_name) = match config {
+    let (m, model_name, model_url) = match config {
         path if is_local_source(path) => {
             anyhow::ensure!(revision.is_none(), "--revision requires a Hugging Face repo ID");
             let checkpoint = Checkpoint::resolve(path, ResolveOptions { quant, weights: None })?;
@@ -113,11 +117,12 @@ pub async fn load_ptts(
                 absolute.parent().context("config has a parent directory")?
             };
             let name = dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            (checkpoint, name)
+            (checkpoint, name, env!("CARGO_PKG_REPOSITORY").to_string())
         }
         repo_id => {
             let repo_id = repo_id.to_str().context("invalid repo ID path")?;
-            (load_from_hf(repo_id, revision, quant).await?, repo_id.to_string())
+            let url = format!("https://huggingface.co/{repo_id}");
+            (load_from_hf(repo_id, revision, quant).await?, repo_id.to_string(), url)
         }
     };
     let extra_voices = if let Some(voice_dir) = voice_dir {
@@ -160,6 +165,8 @@ pub async fn load_ptts(
         synth,
         requests: Arc::new(tokio::sync::Semaphore::new(max_concurrent_requests.get())),
         model_name,
+        model_url,
+        normalize,
         voices,
         seed_base,
         sample_rate,

@@ -3,6 +3,7 @@ mod encoder;
 mod model;
 mod mp3;
 mod utils;
+mod wyoming;
 
 use anyhow::{Context, Result};
 use axum::Router;
@@ -19,6 +20,11 @@ use tracing_subscriber::prelude::*;
 struct Args {
     #[arg(long, default_value = "0.0.0.0:8880", env = "PTTS_ADDR")]
     addr: String,
+
+    /// Also serve the Wyoming protocol, which Home Assistant uses for local voice services, on
+    /// this address, such as `0.0.0.0:10200`. Off when not set.
+    #[arg(long, env = "PTTS_WYOMING_ADDR")]
+    wyoming_addr: Option<String>,
 
     /// Maximum simultaneous speech generations. Excess requests receive HTTP 429.
     #[arg(long, default_value = "1", env = "PTTS_MAX_CONCURRENT_REQUESTS", value_parser = parse_request_limit)]
@@ -110,6 +116,15 @@ async fn main() -> Result<()> {
     // The weight loading that follows is CPU-bound and blocks the runtime
     // thread, which is fine here: nothing is served until it is done.
     let app_state = build_app_state(&args).await?;
+
+    if let Some(addr) = &args.wyoming_addr {
+        let server = std::sync::Arc::new(wyoming::Server::new(&app_state)?);
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .with_context(|| format!("cannot listen for Wyoming on {addr}"))?;
+        tracing::info!(%addr, "listening for Wyoming");
+        tokio::spawn(wyoming::serve(listener, server));
+    }
 
     let app = Router::new()
         .route("/v1/audio/speech", post(api::speech))

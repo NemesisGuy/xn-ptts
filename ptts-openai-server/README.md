@@ -1,6 +1,6 @@
 # ptts-openai-server
 
-A speech server for Phonon compatible with OpenAI's text-to-speech API: `POST /v1/audio/speech`, so any client with an "OpenAI TTS" setting and a custom base URL works unchanged. For streaming text in and audio out over one WebSocket connection, use [`ptts-ws-server`](../ptts-ws-server) instead.
+A speech server for Phonon compatible with OpenAI's text-to-speech API: `POST /v1/audio/speech`, so any client with an "OpenAI TTS" setting and a custom base URL works unchanged. It can also serve the [Wyoming protocol](#home-assistant), which Home Assistant uses for local voice services. For streaming text in and audio out over one WebSocket connection, use [`ptts-ws-server`](../ptts-ws-server) instead.
 
 ## Docker
 
@@ -12,7 +12,7 @@ docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
   ghcr.io/gradium-ai/ptts-openai-server
 ```
 
-The image contains the server and no model weights. It is built for `linux/amd64` (an x86 CPU with AVX2) and `linux/arm64`. Every model supplies its own `config.json` and `tokenizer.json`.
+The image contains the server and no model weights. It is built for `linux/amd64` and `linux/arm64`. On an x86 CPU without AVX2 it runs a slower build made for such CPUs, and says so when it starts. Every model supplies its own `config.json` and `tokenizer.json`.
 
 To download from HF instead, set `PTTS_CONFIG=OWNER/MODEL` and `PTTS_REVISION` to the desired revision. Set `HF_TOKEN` for a private repo. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
 
@@ -85,6 +85,24 @@ Errors use OpenAI's shape, `{"error": {"message", "type", "param", "code"}}`, so
 ## Clients
 
 - **Open WebUI:** Admin Settings, Audio, Text-to-Speech engine `OpenAI`, API base URL `http://<host>:8880/v1`, any API key. Set the voice to `default` or a voice from `/v1/audio/voices`.
-- **Home Assistant** ([sfortis/openai_tts](https://github.com/sfortis/openai_tts)): Custom endpoint, URL `http://<host>:8880/v1/audio/speech`, model `tts-1`. The voice list is read from `/v1/audio/voices`.
+- **Home Assistant:** use the [Wyoming protocol](#home-assistant), which needs no custom integration. The [sfortis/openai_tts](https://github.com/sfortis/openai_tts) integration also works: Custom endpoint, URL `http://<host>:8880/v1/audio/speech`, model `tts-1`. The voice list is read from `/v1/audio/voices`.
 - **LiveKit Agents:** `openai.TTS(base_url="http://<host>:8880/v1", api_key="unused", model="tts-1", voice="default")`.
 - **SillyTavern:** TTS provider "OpenAI Compatible", endpoint `http://<host>:8880/v1/audio/speech`, voices `default` or the checkpoint's own. Leave the speed at 1.
+
+## Home Assistant
+
+Home Assistant talks to local speech services over the Wyoming protocol. Set `--wyoming-addr` (or `PTTS_WYOMING_ADDR`) and the server answers it on that address as well as serving the HTTP API:
+
+```bash
+docker run -p 10200:10200 -v "$MODEL_DIR:/models:ro" \
+  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_WYOMING_ADDR=0.0.0.0:10200 \
+  ghcr.io/gradium-ai/ptts-openai-server
+```
+
+Then, in Home Assistant, add the **Wyoming Protocol** integration with this machine's address and port `10200`. Phonon appears as a text-to-speech engine that you can pick in a voice assistant. On Home Assistant OS, the [Phonon app](https://github.com/gradium-ai/phonon-home-assistant) runs the server for you, and Home Assistant finds it on its own.
+
+- **Language.** Every voice is listed in the `--lang` language, which must not be `none`: Home Assistant names a voice in each request but never a language. For a second language, run a second server.
+- **Streaming.** Home Assistant sends an assistant's reply while it is still being written. The server speaks it a sentence at a time, so speech starts with the first sentence, not after the last.
+- **Busy server.** Wyoming requests share the HTTP API's `--max-concurrent-requests` slots. They wait for a free slot instead of failing.
+- **Access.** Like the HTTP API, the Wyoming port has no authentication. Publish it only on a network you trust.

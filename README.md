@@ -47,6 +47,7 @@ The browser runs synthesis on your device; it downloads model files on first use
 | Run speech in a web app | [Browser](#browser) | `phonon-tts` and model files served with your app. |
 | Add speech to an iPhone or Mac app | [Swift](#swift) | The `ptts` Swift package and a prepared Core ML bundle. |
 | Add speech to an Android app | [Android](#android) | A Kotlin AAR preview for supported Snapdragon NPUs, or the CPU native library. Source build and model files required. |
+| Give Home Assistant's voice assistant a local voice | [Home Assistant](ptts-openai-server/README.md#home-assistant) | Home Assistant and a checkpoint. No custom integration. |
 | Connect an existing app or self-host | [Docker and OpenAI-compatible API](#docker-and-openai-compatible-api) | Docker and a local checkpoint or HF repo. |
 | Embed the runtime in Rust | [Rust](#rust) | The `ptts` crate and a checkpoint folder. |
 
@@ -65,6 +66,7 @@ Packages and native downloads are available as a runtime preview. Follow the [ru
 | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; model weights downloaded or mounted separately. [Server guide](ptts-openai-server/README.md). |
+| Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. [Setup](ptts-openai-server/README.md#home-assistant). |
 | Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
 Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs may need a source build: x86 wheels and desktop downloads target x86-64-v3. See the platform requirements in the [CLI guide](docs/cli.md) and [Python guide](ptts-pyo3/README.md).
@@ -358,7 +360,7 @@ Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chu
 | Apple installation, model bundles, playback, and cancellation | [Swift](ios/PhononTTS/README.md) |
 | Android CPU library, Kotlin, NDK, and playback | [Android](android/README.md) |
 | Android Snapdragon NPU AAR, Kotlin API, and compiled bundles | [QNN Android](qnn/android/README.md) |
-| Docker, OpenAI-compatible clients, and deployment | [HTTP server](ptts-openai-server/README.md) |
+| Docker, OpenAI-compatible clients, Home Assistant, and deployment | [HTTP server](ptts-openai-server/README.md) |
 | Streaming text and audio over one connection | [WebSocket server](ptts-ws-server/README.md) |
 | Rust library and the `say` example | [Rust](ptts/README.md) |
 | Build packages, run the local demo, and develop from source | [Development](docs/development.md) |
