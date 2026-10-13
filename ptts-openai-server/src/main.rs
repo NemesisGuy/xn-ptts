@@ -32,7 +32,7 @@ struct Args {
     /// Required. Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging
     /// Face repo as `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision
     /// to reproduce a release.
-    #[arg(long, env = "PTTS_MODEL", required_unless_present = "config", conflicts_with = "config")]
+    #[arg(long, env = "PTTS_MODEL", required_unless_present = "config")]
     model: Option<String>,
 
     /// Deprecated: a local model or a bare Hugging Face repo ID. Use --model.
@@ -40,7 +40,7 @@ struct Args {
     config: Option<String>,
 
     /// Deprecated: the revision of --config. Use --model hf://owner/name@revision.
-    #[arg(long, env = "PTTS_REVISION", hide = true, requires = "config")]
+    #[arg(long, env = "PTTS_REVISION", hide = true)]
     revision: Option<String>,
 
     /// Optional directory of additional voice safetensors to load. Each
@@ -95,9 +95,18 @@ struct Args {
 }
 
 impl Args {
+    /// The deprecated flags are checked here rather than by clap, whose errors would name the
+    /// hidden flags, not the variable left over from an older setup.
     fn model_source(&self) -> Result<String> {
         match (&self.model, &self.config) {
-            (Some(model), _) => Ok(model.clone()),
+            (Some(_), Some(_)) => {
+                anyhow::bail!("PTTS_MODEL replaces PTTS_CONFIG: unset PTTS_CONFIG (or --config)")
+            }
+            (Some(_), None) if self.revision.is_some() => anyhow::bail!(
+                "PTTS_MODEL takes the revision itself, as hf://owner/name@revision: unset \
+                 PTTS_REVISION (or --revision)"
+            ),
+            (Some(model), None) => Ok(model.clone()),
             (None, Some(config)) => {
                 tracing::warn!("--config and --revision are deprecated: use --model (PTTS_MODEL)");
                 Ok(ptts::checkpoint::legacy_source(config, self.revision.as_deref())?)
@@ -217,7 +226,11 @@ mod tests {
         .unwrap();
         assert_eq!(args.model_source().unwrap(), "hf://owner/model@abc");
         let both = ["server", "--model", "a", "--config", "b", "--lang", "none"];
-        assert!(Args::try_parse_from(both).is_err());
+        let err = Args::try_parse_from(both).unwrap().model_source().unwrap_err();
+        assert!(err.to_string().contains("unset PTTS_CONFIG"), "{err}");
+        let stale = ["server", "--model", "a", "--revision", "main", "--lang", "none"];
+        let err = Args::try_parse_from(stale).unwrap().model_source().unwrap_err();
+        assert!(err.to_string().contains("hf://owner/name@revision"), "{err}");
     }
 
     #[test]

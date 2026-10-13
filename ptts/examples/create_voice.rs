@@ -1,3 +1,12 @@
+//! Write a voice embedding for a checkpoint, from audio or stored latents.
+//!
+//! ```text
+//! cargo run --release -p ptts --example create_voice --features audio -- \
+//!     --model /path/to/model --input voice.wav --output voice.safetensors
+//! ```
+//!
+//! An `hf://owner/name` model also needs `--features audio,hub`.
+
 #[path = "../src/bin/ptts/model_helpers.rs"]
 mod model_helpers;
 

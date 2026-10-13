@@ -62,6 +62,7 @@ impl Checkpoint {
                 // `owner/name` was how a Hub repo used to be given.
                 Some(s)
                     if !s.starts_with(['.', '/'])
+                        && !s.contains([':', '\\'])
                         && !s.ends_with(".json")
                         && s.split('/').count() == 2 =>
                 {
@@ -148,6 +149,11 @@ pub fn legacy_source(config: &str, revision: Option<&str>) -> Result<String> {
         || path.starts_with(".")
         || path.components().next().is_some_and(|c| c.as_os_str() == "..")
         || path.extension().is_some_and(|ext| ext == "json");
+    if config.starts_with(crate::hub::SCHEME) && revision.is_some() {
+        return Err(Error::InvalidArgument(
+            "the revision goes in the model: hf://owner/name@revision".into(),
+        ));
+    }
     if local || config.starts_with(crate::hub::SCHEME) {
         if revision.is_some() {
             return Err(Error::InvalidArgument(

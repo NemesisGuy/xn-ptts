@@ -169,6 +169,10 @@ fn legacy_sources_keep_their_meaning() {
     assert_eq!(legacy_source("owner/model", None).unwrap(), "hf://owner/model");
     assert_eq!(legacy_source("owner/model", Some("abc")).unwrap(), "hf://owner/model@abc");
     assert_eq!(legacy_source("hf://owner/model@abc", None).unwrap(), "hf://owner/model@abc");
+    let Err(Error::InvalidArgument(msg)) = legacy_source("hf://owner/model", Some("abc")) else {
+        panic!("a separate revision for an hf:// source")
+    };
+    assert!(msg.contains("hf://owner/name@revision"), "{msg}");
 }
 
 #[cfg(windows)]
