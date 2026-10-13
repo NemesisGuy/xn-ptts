@@ -4,9 +4,10 @@
 
 use anyhow::{Context as _, Result};
 use ptts::Tokenizer as _;
+use ptts::asr::Dtype;
 use ptts::asr::{Asr, Step};
 use ptts::checkpoint::is_local_source;
-use ptts::synth::Quant;
+use ptts::synth::{DeviceKind, Quant};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -106,7 +107,9 @@ pub async fn load_asr(
     source: &Path,
     revision: Option<&str>,
     tokenizer: Option<&Path>,
+    device: DeviceKind,
     quant: Quant,
+    dtype: Option<Dtype>,
     max_concurrent_requests: std::num::NonZeroUsize,
 ) -> Result<AsrApp> {
     let (files, model_name): (Vec<PathBuf>, String) = if is_local_source(source) {
@@ -148,12 +151,18 @@ pub async fn load_asr(
     let [config, model, mimi, tokenizer] = &files[..] else { unreachable!("four files") };
     let config = ptts::asr::read_config(config)?;
     let model_ext = config.model_ext();
-    let asr = Asr::builder(config, model, mimi).quant(quant).build()?;
+    let mut builder = Asr::builder(config, model, mimi).device(device).quant(quant);
+    if let Some(dtype) = dtype {
+        builder = builder.dtype(dtype);
+    }
+    let asr = builder.build()?;
     let tokenizer = ptts::tok::Tok::open(tokenizer)?;
     tracing::info!(
         model = %model_name,
         checkpoint = model_ext.as_deref().unwrap_or("?"),
+        device = %asr.device_name(),
         weights = %quant.as_str(),
+        dtype = dtype.map_or("default", Dtype::as_str),
         vad_horizons = ?asr.vad_horizons(),
         delay_frames = asr.delay_frames(),
         "ASR model loaded"

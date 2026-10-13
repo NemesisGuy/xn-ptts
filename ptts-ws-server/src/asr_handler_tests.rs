@@ -670,18 +670,29 @@ fn read_wav_s16(path: &std::path::Path) -> Vec<i16> {
 /// Same audio with and without a peek every half second: the live stream's replies must be
 /// identical, and the last peek must predict exactly what `end_of_stream` then flushes.
 ///
-/// `cargo test --release -p ptts-ws-server -- --ignored peeks_on_the_real_model`
+/// `cargo test --release -p ptts-ws-server -- --ignored peeks_on_the_real_model`. Set
+/// `PTTS_TEST_ASR_DEVICE=cuda` (with the `cuda` feature) to run it on the GPU, and optionally
+/// `PTTS_TEST_ASR_DTYPE`; on the CPU the weights are `q8_0`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "requires PTTS_TEST_ASR_MODEL (a speech-recognition checkpoint folder with a \
             tokenizer.json) and PTTS_TEST_ASR_AUDIO (24 kHz mono 16-bit WAV of speech)"]
 async fn peeks_on_the_real_model_leave_the_live_stream_bit_for_bit_alone() {
+    use ptts::synth::{DeviceKind, Quant};
     let dir = std::env::var("PTTS_TEST_ASR_MODEL").expect("set PTTS_TEST_ASR_MODEL");
     let audio = std::env::var("PTTS_TEST_ASR_AUDIO").expect("set PTTS_TEST_ASR_AUDIO");
+    let device: DeviceKind = match std::env::var("PTTS_TEST_ASR_DEVICE") {
+        Ok(name) => name.parse().unwrap(),
+        Err(_) => DeviceKind::Cpu,
+    };
+    let quant = if device.resolve() == DeviceKind::Cpu { Quant::Q80 } else { Quant::F32 };
+    let dtype = std::env::var("PTTS_TEST_ASR_DTYPE").ok().map(|d| d.parse().unwrap());
     let app = crate::asr::load_asr(
         std::path::Path::new(&dir),
         None,
         None,
-        ptts::synth::Quant::Q80,
+        device,
+        quant,
+        dtype,
         std::num::NonZeroUsize::new(1).unwrap(),
     )
     .await

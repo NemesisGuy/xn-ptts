@@ -94,9 +94,20 @@ struct Args {
 
     /// Quantization of the ASR transformer linears, applied at load time: one of the
     /// `--quant` values. Unquantized by default; `q8` runs about twice as fast on the CPU.
-    /// The ASR runs on the CPU whatever `--device` is.
+    /// CPU only.
     #[arg(long, requires = "asr_config")]
     asr_quant: Option<String>,
+
+    /// Device for the ASR: auto, cpu or cuda. Defaults to `--device`, so one flag moves the
+    /// whole server; set it to split them, e.g. `--asr-device cpu` to keep a quantized ASR on
+    /// the CPU while the TTS runs on the GPU.
+    #[arg(long, requires = "asr_config")]
+    asr_device: Option<String>,
+
+    /// What the ASR LM computes in on a GPU: f32 (the default), bf16 or f16. The Mimi encoder
+    /// stays f32. Not available on the CPU, where `--asr-quant` is the knob instead.
+    #[arg(long, requires = "asr_config")]
+    asr_dtype: Option<String>,
 
     /// Maximum open `/speech/asr` sessions, counted separately from `/speech/tts` so an agent
     /// can hold one of each. Excess connections receive HTTP 429.
@@ -195,11 +206,23 @@ async fn build_asr_state(args: &Args) -> Result<asr::AsrApp> {
         None => Quant::F32,
         Some(name) => name.parse::<Quant>()?,
     };
+    let device = args.asr_device.as_deref().unwrap_or(&args.device).parse::<DeviceKind>()?;
+    let dtype = args.asr_dtype.as_deref().map(str::parse::<ptts::asr::Dtype>).transpose()?;
+    // Checked before downloading, as for the TTS.
+    quant.check_device(device).with_context(|| {
+        format!(
+            "--asr-quant {} needs the CPU, but the ASR device is {:?}; pass --asr-device cpu",
+            quant.as_str(),
+            device.resolve()
+        )
+    })?;
     asr::load_asr(
         source,
         args.asr_revision.as_deref(),
         args.asr_tokenizer.as_deref(),
+        device,
         quant,
+        dtype,
         args.asr_max_concurrent_requests,
     )
     .await
