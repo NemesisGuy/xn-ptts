@@ -55,6 +55,20 @@ libc = { workspace = true }
 features = ["hf", "audio"]
 rustdoc-args = ["--cfg", "docsrs"]
 
+# `cargo binstall ptts` fetches the command from the desktop archives that
+# `.github/workflows/cli-release.yml` attaches to each release (see `scripts/package-cli.py`).
+# A target without an archive falls back to `cargo install`, which installs the command only
+# when binstall is given `--features cli`.
+# Quick-install is off: its prebuilt binaries use default features, which have no command.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ name }-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [features]
 default = []
 # Installable command; the library stays free of download and CLI dependencies by default.

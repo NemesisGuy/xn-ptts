@@ -133,3 +133,5 @@ Installed wheel tests run without weights by default. Supply `PTTS_TEST_MODEL` a
 ## Updating the Homebrew formula
 
 The native release workflow generates `ptts.rb` from the four Mac and Linux archives it uploads. After publishing a release, copy that generated file into [`Formula/ptts.rb` in Gradium's tap](https://github.com/gradium-ai/homebrew-tap/blob/main/Formula/ptts.rb) and merge the change there. Check `ruby -c Formula/ptts.rb` and verify each SHA-256 against its published archive before merging. Tap users receive the new version through `brew update` and `brew upgrade`.
+
+`cargo binstall ptts` downloads from the release, and a draft release's archives are not public. Publish the GitHub release before, or together with, `cargo publish -p ptts`.
