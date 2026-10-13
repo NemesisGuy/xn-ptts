@@ -2,7 +2,7 @@
 
     import ptts
 
-    tts = ptts.TTS(lang="en")
+    tts = ptts.TTS(lang="en")  # the default model, downloaded on first use
     tts.save("out.wav", "Hello world")
 
 No PyTorch, no `espeak-ng`, no system packages -- the whole runtime is a Rust
@@ -10,6 +10,7 @@ extension in this wheel. See https://github.com/gradium-ai/xn-ptts.
 """
 
 from ._ptts import (
+    DEFAULT_MODEL,
     TTS,
     AudioStream,
     __version__,
@@ -21,6 +22,7 @@ from ._ptts import (
 )
 
 __all__ = [
+    "DEFAULT_MODEL",
     "TTS",
     "AudioStream",
     "__version__",

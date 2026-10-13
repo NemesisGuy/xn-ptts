@@ -161,6 +161,13 @@ fn only_hf_sources_are_hub_repos() {
 }
 
 #[test]
+fn the_default_model_is_a_hub_repo_pinned_to_a_commit() {
+    let hub = ptts::hub::HubSource::parse(ptts::checkpoint::DEFAULT_MODEL).unwrap().unwrap();
+    let revision = hub.revision.expect("the default names a revision");
+    assert!(revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()), "{revision}");
+}
+
+#[test]
 fn legacy_sources_keep_their_meaning() {
     for path in ["./missing", "../missing", "/missing/checkpoint", "missing/config.json"] {
         assert_eq!(legacy_source(path, None).unwrap(), path);

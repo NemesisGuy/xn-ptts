@@ -5,7 +5,7 @@
 //!     --model /path/to/model --input voice.wav --output voice.safetensors
 //! ```
 //!
-//! An `hf://owner/name` model also needs `--features audio,hub`.
+//! The default model, or any `hf://owner/name` one, also needs `--features audio,hub`.
 
 #[path = "../src/bin/ptts/model_helpers.rs"]
 mod model_helpers;
@@ -19,7 +19,7 @@ use xn::Tensor;
 #[command(name = "create-voice")]
 #[command(about = "Generate some embedding files for Phonon")]
 struct Args {
-    #[arg(long, help = model_helpers::MODEL_HELP)]
+    #[arg(long, default_value = model_helpers::DEFAULT_MODEL, help = model_helpers::MODEL_HELP)]
     model: String,
 
     /// Weights file inside the model, when it has several. Defaults to the f32 weights, which

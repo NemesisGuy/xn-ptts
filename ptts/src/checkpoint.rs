@@ -1,7 +1,8 @@
 //! Shared native checkpoint file resolution.
 //!
-//! [`Checkpoint::locate`] accepts an explicitly supplied model directory or config file, or a
-//! Hugging Face repo as `hf://owner/name[@revision]` (see [`crate::hub`]).
+//! [`Checkpoint::locate`] accepts a model directory or config file, or a Hugging Face repo as
+//! `hf://owner/name[@revision]` (see [`crate::hub`]). Frontends load [`DEFAULT_MODEL`] when none
+//! is given.
 //! Each checkpoint supplies its own config, tokenizer, weights, and optional voices.
 
 use crate::hub::HubSource;
@@ -10,6 +11,12 @@ use crate::synth::{Quant, Synth, SynthBuilder};
 use crate::tts_model::TTSConfig;
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
+
+/// The model every frontend loads when none is given, pinned to a commit so a default install is
+/// reproducible. Loading it needs the `hub` feature. The browser package keeps a copy in
+/// `ptts-wasm/js/hub.js`, which its tests hold to this one.
+pub const DEFAULT_MODEL: &str =
+    "hf://davencyw/pocket-tts-ptts@7cc3c90b88f3e6617ded1b9b74100d1cd0162d90";
 
 /// Standard weight filenames, ordered by the requested quantization.
 pub fn weight_candidates(quant: Quant) -> [&'static str; 2] {

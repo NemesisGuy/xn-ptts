@@ -13,8 +13,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 __version__: str
+DEFAULT_MODEL: str
+"""The model `TTS` loads when none is given, as `hf://owner/name@revision`."""
 
 __all__ = [
+    "DEFAULT_MODEL",
     "TTS",
     "AudioStream",
     "__version__",
@@ -29,8 +32,8 @@ class TTS:
     """A loaded Phonon model.
 
     `model` must name a local directory or config.json, or a Hugging Face repo as
-    `"hf://owner/name"` or `"hf://owner/name@revision"`. There is no default model. Local paths
-    never download anything; Hub files are downloaded on first use and cached. The revision, a
+    `"hf://owner/name"` or `"hf://owner/name@revision"`. Left out, it is `DEFAULT_MODEL`. Local
+    paths never download anything; Hub files are downloaded on first use and cached. The revision, a
     branch, tag, or commit, applies to every Hub file. `config` and `revision` are the
     deprecated older spelling, where a bare `"owner/name"` named a repo.
 

@@ -1,6 +1,6 @@
 # phonon-tts
 
-Text-to-speech that runs in the browser, on the user's device. No server, no API key. It streams speech from an explicitly supplied Phonon checkpoint, compiled to WebAssembly from the [Rust runtime](https://github.com/gradium-ai/xn-ptts).
+Text-to-speech that runs in the browser, on the user's device. No server, no API key. It streams speech from a Phonon checkpoint, compiled to WebAssembly from the [Rust runtime](https://github.com/gradium-ai/xn-ptts).
 
 ```bash
 npm install phonon-tts
@@ -9,20 +9,12 @@ npm install phonon-tts
 ```js
 import { PhononTTS } from 'phonon-tts';
 
-const tts = await PhononTTS.load({
-  lang: 'en',
-  model: {
-    weights: { q8: '/model/model.q8.gguf' },
-    tokenizer: '/model/tokenizer.json',
-    config: '/model/config.json',
-    voices: { Freya: '/model/voices/Freya.safetensors' },
-  },
-});
+const tts = await PhononTTS.load({ lang: 'en' });
 const wav = await tts.synthWav('Hello from your own browser.');
 new Audio(URL.createObjectURL(wav)).play();
 ```
 
-`model` is required: it says where the checkpoint's files are, here a model folder served under `/model/`. See [The model](#the-model) below.
+Without `model`, `load` uses the default model, `DEFAULT_MODEL`, from the Hugging Face Hub. See [The model](#the-model) below for another one.
 
 The first `load` downloads the files, whose size depends on the checkpoint. They are kept in the browser's Cache API, so later page loads start from disk.
 
@@ -68,7 +60,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 
 | Option | Default | |
 |---|---|---|
-| `model` | **required** | where the checkpoint's files are, see [The model](#the-model) |
+| `model` | `DEFAULT_MODEL` | where the checkpoint's files are, see [The model](#the-model) |
 | `lang` | **required** | `'en'`, `'fr'`, `'de'`, `'es'`, `'pt'`, or `'none'`. Numbers, dates and symbols are read out the way a speaker of that language would say them. The spoken forms differ per language, so there is no default. `'none'` passes text through as written. |
 | `rewrites` | `'default'` | which word rewrites run on the normalized text: `'default'` (numbers, currency, dashed-digits, emails, urls, abbreviations, elongations), `'all'` (those and phones, times, dates), `'none'`, or a comma-separated list of rule names. Inert when `lang` is `'none'`. |
 | `conditions` | | values for the conditioners the checkpoint's `config.json` lists, by name, e.g. `{ padding_bonus: 0.5 }`. Those left out take their defaults. |
@@ -105,7 +97,7 @@ Requests on one instance run one at a time, in the order they were made.
 
 ## The model
 
-`model` says where a checkpoint's files are. Relative URLs resolve against the page. There is no default: loading a checkpoint other than the one you meant still produces plausible speech, so the package never picks one for you.
+`model` says where a checkpoint's files are. Relative URLs resolve against the page. Left out, it is `DEFAULT_MODEL`, which the package exports: a public Hugging Face repo pinned to a commit.
 
 ```js
 await PhononTTS.load({

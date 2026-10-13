@@ -1,11 +1,12 @@
 # Phonon WebSocket server
 
-Run with a checkpoint folder, or a Hugging Face repo as `hf://owner/name`:
+Run it with the default model, downloaded on first start:
 
 ```bash
-cargo run --release -p ptts-ws-server -- \
-  --model "$MODEL_DIR" --quant q8 --lang en
+cargo run --release -p ptts-ws-server -- --quant q8 --lang en
 ```
+
+`--model` loads another one: a checkpoint folder, or a Hugging Face repo as `hf://owner/name`.
 
 The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts`. `--addr` changes the address. The checkpoint supplies its config, tokenizer, weights, and voices; `--model hf://owner/name@revision` selects a Hub revision. Building requires libopus (`apt-get install libopus-dev` or `brew install opus`).
 

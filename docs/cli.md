@@ -41,11 +41,17 @@ On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](
 brew install gradium-ai/tap/ptts
 ```
 
-Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.1` runtime preview and pins each release archive by SHA-256. It does not include a model. Supply one with `--model` when running `ptts`. The `0.4.0-rc.1` command takes `--dir`, or `--repo` and `--revision`, instead.
+Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.1` runtime preview and pins each release archive by SHA-256. It does not include a model: `ptts` downloads the default model on first use, or loads the one `--model` names. The `0.4.0-rc.1` command has no default model, and takes `--dir`, or `--repo` and `--revision`, instead of `--model`.
 
 After a new formula version is published, run `brew update` and `brew upgrade gradium-ai/tap/ptts`. The platform and CPU requirements above still apply.
 
 ## Generate speech
+
+```sh
+ptts --lang en "Hello world" -o out.wav
+```
+
+The first run downloads the default model from Hugging Face and caches it. To use a local checkpoint instead:
 
 ```sh
 ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav

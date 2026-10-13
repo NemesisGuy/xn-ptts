@@ -91,10 +91,11 @@ def test_a_bare_repo_id_is_a_local_path(hub):
     assert hub.requests == []
 
 
-def test_missing_model_source_never_selects_a_hub_repo(hub):
-    with pytest.raises(ValueError, match="model is required"):
-        ptts.TTS(lang="en")
-    assert hub.requests == []
+def test_without_a_model_the_default_is_fetched(hub):
+    repo, revision = ptts.DEFAULT_MODEL.removeprefix("hf://").split("@")
+    with pytest.raises(LookupError, match="config.json"):
+        ptts.TTS(lang="en", quant="q8")
+    assert f"/{repo}/resolve/{revision}/config.json" in hub.requests
 
 
 @pytest.mark.parametrize("device", ["cuda", "vulkan", "metal"])

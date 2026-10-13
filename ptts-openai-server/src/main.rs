@@ -29,10 +29,10 @@ struct Args {
     #[arg(long, default_value = "1", env = "PTTS_MAX_CONCURRENT_REQUESTS", value_parser = parse_request_limit)]
     max_concurrent_requests: std::num::NonZeroUsize,
 
-    /// Required. Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging
-    /// Face repo as `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision
-    /// to reproduce a release.
-    #[arg(long, env = "PTTS_MODEL", required_unless_present = "config")]
+    /// Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging Face repo as
+    /// `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision to reproduce a
+    /// release. Defaults to the default model, downloaded from the Hub and cached on first use.
+    #[arg(long, env = "PTTS_MODEL")]
     model: Option<String>,
 
     /// Deprecated: a local model or a bare Hugging Face repo ID. Use --model.
@@ -98,7 +98,9 @@ impl Args {
     /// The deprecated flags are checked here rather than by clap, whose errors would name the
     /// hidden flags, not the variable left over from an older setup.
     fn model_source(&self) -> Result<String> {
-        match (&self.model, &self.config) {
+        // Compose files pass `PTTS_MODEL=` for "not set".
+        let model = self.model.as_ref().filter(|m| !m.is_empty());
+        match (model, &self.config) {
             (Some(_), Some(_)) => {
                 anyhow::bail!("PTTS_MODEL replaces PTTS_CONFIG: unset PTTS_CONFIG (or --config)")
             }
@@ -111,7 +113,7 @@ impl Args {
                 tracing::warn!("--config and --revision are deprecated: use --model (PTTS_MODEL)");
                 Ok(ptts::checkpoint::legacy_source(config, self.revision.as_deref())?)
             }
-            (None, None) => anyhow::bail!("--model is required"),
+            (None, None) => Ok(ptts::checkpoint::DEFAULT_MODEL.to_string()),
         }
     }
 }
@@ -211,6 +213,16 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn without_a_model_the_default_loads() {
+        for argv in
+            [&["server", "--lang", "none"][..], &["server", "--model", "", "--lang", "none"]]
+        {
+            let args = Args::try_parse_from(argv).unwrap();
+            assert_eq!(args.model_source().unwrap(), ptts::checkpoint::DEFAULT_MODEL);
+        }
+    }
 
     #[test]
     fn the_deprecated_config_flag_still_names_a_model() {

@@ -4,7 +4,13 @@ A speech server for Phonon compatible with OpenAI's text-to-speech API: `POST /v
 
 ## Docker
 
-Set `MODEL_DIR` to a local folder holding the checkpoint's config, tokenizer, weights, and voices:
+The server downloads the default model on first start:
+
+```bash
+docker run -p 8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 ghcr.io/gradium-ai/ptts-openai-server
+```
+
+To serve a local checkpoint instead, mount its folder and point `PTTS_MODEL` at it:
 
 ```bash
 docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
@@ -14,19 +20,19 @@ docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
 
 The image contains the server and no model weights. It is built for `linux/amd64` and `linux/arm64`. On an x86 CPU without AVX2 it runs a slower build made for such CPUs, and says so when it starts. Every model supplies its own `config.json` and `tokenizer.json`.
 
-To download from HF instead, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`. Set `HF_TOKEN` for a private repo. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
+To serve another model from HF, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`. Set `HF_TOKEN` for a private repo. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
 
-Replace `OWNER/MODEL` and `COMMIT_SHA` with the repo and revision you want to run.
+The Hub Compose file serves the default model, or the one `PTTS_MODEL` names:
 
 ```bash
-export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA PTTS_LANG=en
-# For a private repo, also set HF_TOKEN in your environment.
+export PTTS_LANG=en
+# Optional: export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA, and HF_TOKEN for a private repo.
 docker compose -f ptts-openai-server/compose.hub.yaml up
 ```
 
 The Hub Compose file requires an image release that includes this writable cache directory; earlier images may create a cache mount owned by root. Without `@COMMIT_SHA` the repo's `main` is used, so the cache retains files but does not freeze the checkpoint version. Set a commit for a fixed checkpoint.
 
-The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. `PTTS_MODEL` needs an image newer than `0.4.0-rc.1`, which reads `PTTS_CONFIG` and `PTTS_REVISION` instead. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
+The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. `PTTS_MODEL` and the default model need an image newer than `0.4.0-rc.1`, which reads `PTTS_CONFIG` and `PTTS_REVISION` instead and has no default. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
 
 Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. A JSONL voice catalog, one `{"name", "filename"}` object per line with `filename` relative to the catalog, is loaded with `PTTS_VOICE_CATALOG=/voices/voices.jsonl`. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
 
@@ -47,7 +53,7 @@ brew install opus lame pkg-config                            # macOS
 cargo run --release -p ptts-openai-server -- --model "$MODEL_DIR" --quant q8 --lang en
 ```
 
-`--model` (`PTTS_MODEL`) names a checkpoint folder (or a `config.json` in one), or a Hugging Face repo as `hf://owner/name` or `hf://owner/name@revision`. It is required; no model is selected automatically. The older `PTTS_CONFIG` and `PTTS_REVISION` still work but are deprecated.
+`--model` (`PTTS_MODEL`) names a checkpoint folder (or a `config.json` in one), or a Hugging Face repo as `hf://owner/name` or `hf://owner/name@revision`. Without it, the server loads the default model. The older `PTTS_CONFIG` and `PTTS_REVISION` still work but are deprecated.
 
 It listens on `0.0.0.0:8880` (`--addr` to change it). There is no authentication, and each request can ask for up to 4096 characters of speech. On a machine others can reach, bind to `--addr 127.0.0.1:8880` or put it behind a proxy that checks access. `--lang` is required: it picks how numbers and symbols are spelled out. `--device auto` uses the GPU backend the binary was built with, if any; quantized weights such as `--quant q8` run on the CPU only. A checkpoint whose config lists conditioners, such as `padding_bonus`, takes their values with `--condition padding_bonus=0.5` (repeatable, or `PTTS_CONDITION=padding_bonus=0.5,num_speakers=2` in the environment); those not given take their defaults. `--help` lists the rest.
 
@@ -93,8 +99,7 @@ Errors use OpenAI's shape, `{"error": {"message", "type", "param", "code"}}`, so
 Home Assistant talks to local speech services over the Wyoming protocol. Set `--wyoming-addr` (or `PTTS_WYOMING_ADDR`) and the server answers it on that address as well as serving the HTTP API:
 
 ```bash
-docker run -p 10200:10200 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+docker run -p 10200:10200 -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   -e PTTS_WYOMING_ADDR=0.0.0.0:10200 \
   ghcr.io/gradium-ai/ptts-openai-server
 ```

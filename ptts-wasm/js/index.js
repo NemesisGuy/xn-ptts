@@ -4,10 +4,11 @@
 // generating never blocks the page; this file only posts requests to it and turns its
 // replies into promises and async iterators.
 
-import { resolveHubModel } from './hub.js';
+import { DEFAULT_MODEL, resolveHubModel } from './hub.js';
 import { concatPcm, encodeWav } from './wav.js';
 
 export { clearCache } from './fetch.js';
+export { DEFAULT_MODEL } from './hub.js';
 export { encodeWav, concatPcm } from './wav.js';
 
 const LANGS = ['en', 'fr', 'de', 'es', 'pt', 'none'];
@@ -59,7 +60,7 @@ export class PhononTTS {
       rewrites,
       conditions,
       quant = 'q8',
-      model,
+      model = DEFAULT_MODEL,
       voices,
       cache = true,
       onProgress,
@@ -118,16 +119,14 @@ export class PhononTTS {
       }
       return `${name}=${value}`;
     });
-    // Required too. A default checkpoint would be one particular model's files, and loading
-    // a model other than the one the caller has in mind gives plausible speech with nothing
-    // to say it is the wrong model. Checked last, so a bad option fails before a Hub request.
+    // Checked last, so a bad option fails before a Hub request.
     const spec = typeof model === 'string' ? await resolveHubModel(model, { cache }) : model;
     if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) {
       throw new TypeError(
-        "model is required: where the checkpoint's files are, e.g. " +
+        "model must say where the checkpoint's files are, e.g. " +
           "{ weights: { q8: '/model/model.q8.gguf' }, tokenizer: '/model/tokenizer.json', " +
           "config: '/model/config.json', voices: { Freya: '/model/voices/Freya.safetensors' } }, " +
-          "or a Hugging Face repo, 'hf://owner/name'",
+          "or name a Hugging Face repo, 'hf://owner/name'. Leave it out for the default model.",
       );
     }
     if (!isUrl(spec.tokenizer)) {

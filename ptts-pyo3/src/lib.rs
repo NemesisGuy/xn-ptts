@@ -86,9 +86,10 @@ struct Tts {
 impl Tts {
     /// `TTS(model=None, device=None, quant=None, voice=None, temperature=0.3, seed=..., cfg_coef=None, eos_threshold=None, *, lang, rewrites=None, conditions=None, voice_catalog=None)`
     ///
-    /// `model` is required: a local model directory or `config.json`, or a Hugging Face repo as
-    /// `"hf://owner/name"` or `"hf://owner/name@revision"`. `config=` and `revision=` are its
-    /// deprecated older spelling, where a bare `"owner/name"` named a repo.
+    /// `model` is a local model directory or `config.json`, or a Hugging Face repo as
+    /// `"hf://owner/name"` or `"hf://owner/name@revision"`. Left out, it is `DEFAULT_MODEL`,
+    /// downloaded and cached on first use. `config=` and `revision=` are its deprecated older
+    /// spelling, where a bare `"owner/name"` named a repo.
     ///
     /// `lang` is required and keyword-only: the language text is normalized as
     /// before it is tokenized, one of `"en"`, `"fr"`, `"de"`, `"es"` or
@@ -176,7 +177,8 @@ impl Tts {
                 ));
             }
             (Some(model), None) if revision.is_none() => model,
-            (Some(_), None) => {
+            (None, None) if revision.is_none() => ptts::checkpoint::DEFAULT_MODEL.to_string(),
+            (_, None) => {
                 return Err(pyo3::exceptions::PyValueError::new_err(
                     "revision goes in the model: hf://owner/name@revision",
                 ));
@@ -185,11 +187,6 @@ impl Tts {
                 let warning = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
                 PyErr::warn(py, &warning, c"config= and revision= are deprecated: use model=", 1)?;
                 ptts::checkpoint::legacy_source(&config, revision.as_deref()).py()?
-            }
-            (None, None) => {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "model is required: a local model directory or hf://owner/name",
-                ));
             }
         };
         // Loading reads hundreds of megabytes and runs no Python.
@@ -570,6 +567,7 @@ fn build_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 #[pymodule(name = "_ptts")]
 fn ptts_(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add("DEFAULT_MODEL", ptts::checkpoint::DEFAULT_MODEL)?;
     m.add_class::<Tts>()?;
     m.add_class::<AudioStream>()?;
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
