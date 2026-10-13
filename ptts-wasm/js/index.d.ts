@@ -56,10 +56,11 @@ export interface LoadOptions {
   /** Default `'q8'`. */
   quant?: Quant;
   /**
-   * Required. Where the checkpoint's files are. There is no default: pass the model you
-   * mean.
+   * Required. Where the checkpoint's files are, or a public Hugging Face repo as
+   * `'hf://owner/name'` or `'hf://owner/name@revision'`, whose files are picked as the native
+   * frontends pick them. There is no default: pass the model you mean.
    */
-  model: ModelSpec;
+  model: ModelSpec | string;
   /** Voices to fetch up front. Default: just the default voice; others load on first use. */
   voices?: string[];
   /** Keep downloads in the Cache API, so the model is fetched once per browser. Default `true`. */

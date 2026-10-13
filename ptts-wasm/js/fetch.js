@@ -5,7 +5,7 @@
 /** Bump to orphan everything cached by an older, incompatible version of this package. */
 export const CACHE_NAME = 'phonon-tts-v1';
 
-async function openCache() {
+export async function openCache() {
   // Absent outside secure contexts (plain http other than localhost), and it can throw
   // where storage is blocked. Either way the download still works, it just is not kept.
   if (typeof caches === 'undefined') return null;

@@ -122,7 +122,15 @@ await PhononTTS.load({
 
 `defaultVoice` is the voice used when a request names none; it defaults to the first of `voices`. Only the weights for the `quant` you load have to be listed.
 
-Every model needs its own `config.json` and `tokenizer.json`. Supply their URLs in `ModelSpec`; the package has no model or config fallback. Pocket TTS checkpoints work through this same interface when they supply those files and compatible weights.
+A public Hugging Face repo can be named instead, as `hf://owner/name` or `hf://owner/name@revision` (a branch, tag or commit; `main` when left out):
+
+```js
+await PhononTTS.load({ lang: 'en', model: 'hf://owner/name@COMMIT_SHA' });
+```
+
+One request to the Hub finds the commit and the repo's files, and every file URL is pinned to that commit, so a cached file is never served after the repo changes. The files are picked as the native frontends pick them: `config.json`, `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, and voices under `voices/` or `embeddings/` plus `default-voice.safetensors` as `default`. The Hub's answer is cached too, so a model loaded once also loads offline, or while the Hub fails; a branch then means the commit it pointed at when last looked up. Private and gated repos cannot be loaded this way: the browser has no token to send.
+
+Every model needs its own `config.json` and `tokenizer.json`. Supply their URLs in `ModelSpec`, or a repo that has them; the package has no model or config fallback. Pocket TTS checkpoints work through this same interface when they supply those files and compatible weights.
 
 ## How it runs
 
