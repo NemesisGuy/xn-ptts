@@ -478,12 +478,9 @@ mod tests {
     #[ignore = "requires PTTS_TEST_MODEL pointing to a q8 checkpoint"]
     async fn session_limit_covers_idle_connections_and_releases_after_close() {
         use ptts::synth::{DeviceKind, Quant};
-        let path = std::path::PathBuf::from(
-            std::env::var("PTTS_TEST_MODEL").expect("set PTTS_TEST_MODEL"),
-        );
+        let path = std::env::var("PTTS_TEST_MODEL").expect("set PTTS_TEST_MODEL");
         let app = crate::model::load_ptts(
             &path,
-            None,
             None,
             None,
             DeviceKind::Cpu,

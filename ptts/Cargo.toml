@@ -38,7 +38,6 @@ libc = { workspace = true, optional = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-hf-hub = { workspace = true }
 # For the `export_coreml` example: the Core ML graph builder, and hashing the files it writes.
 ptts-coreml = { path = "../ptts-coreml", features = ["gguf"] }
 sha2 = { workspace = true }
@@ -52,7 +51,7 @@ libc = { workspace = true }
 # `all-features`: that turns on `cuda`, whose build script needs `nvcc`. The `docs` CI job
 # builds this same set, so a docs.rs failure shows up on the PR instead of after publishing.
 [package.metadata.docs.rs]
-features = ["hf", "audio"]
+features = ["hf", "audio", "hub"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 # `cargo binstall ptts` fetches the command from the desktop archives that
@@ -71,8 +70,10 @@ pkg-fmt = "zip"
 
 [features]
 default = []
+# Downloads `hf://` checkpoints from the Hugging Face Hub in `Checkpoint::locate`.
+hub = ["dep:hf-hub"]
 # Installable command; the library stays free of download and CLI dependencies by default.
-cli = ["hf", "audio", "dep:anyhow", "dep:clap", "dep:hf-hub", "dep:tracing-chrome", "dep:libc"]
+cli = ["hf", "audio", "hub", "dep:anyhow", "dep:clap", "dep:tracing-chrome", "dep:libc"]
 cuda = ["xn/cuda", "dep:half"]
 vulkan = ["xn/vulkan"]
 metal = ["xn/metal", "dep:half"]

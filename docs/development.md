@@ -19,14 +19,14 @@ Install [Rust](https://rustup.rs), then:
 
 ```sh
 cargo install --path ptts --locked --features cli
-ptts --dir "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
+ptts --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
 ```
 
 For an edit/build/run loop:
 
 ```sh
 cargo run --release -p ptts --features cli --bin ptts -- \
-  --dir "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
+  --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
 ```
 
 The short `say` library example remains in [`ptts/examples/say.rs`](../ptts/examples/say.rs). The full CLI is now a binary, not an example. See [CLI options](cli.md).
@@ -84,7 +84,7 @@ On a Mac with Xcode 16 and the required Rust targets, build the core and export 
 
 ```sh
 ./ios/build-xcframework.sh
-cargo run --release -p ptts --example export_coreml -- --dir "$MODEL_DIR" phonon-coreml
+cargo run --release -p ptts --example export_coreml -- --model "$MODEL_DIR" phonon-coreml
 ```
 
 Add `ios/PhononTTS` to Xcode as a local package, select the `ptts` product, and add the exported `phonon-coreml` folder as a folder reference named `Models`. The module remains `PhononTTS`. Export conditions must match the checkpoint. [Swift guide](../ios/PhononTTS/README.md).
@@ -98,7 +98,7 @@ From the repository root:
 ```sh
 docker build -f ptts-openai-server/Dockerfile -t ptts-openai-server:local .
 docker run --rm -p 127.0.0.1:8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   ptts-openai-server:local
 ```
 

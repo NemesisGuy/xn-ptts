@@ -5,8 +5,8 @@
 //! the voices, and a `bundle.json` describing it all with every file's size and SHA-256.
 //!
 //! ```bash
-//! cargo run --release -p ptts --example export_coreml -- out/phonon-coreml
-//! cargo run --release -p ptts --example export_coreml -- --dir path/to/checkpoint out/models
+//! cargo run --release -p ptts --example export_coreml -- --model path/to/checkpoint out/models
+//! cargo run --release -p ptts --example export_coreml --features hub -- --model hf://owner/name out/models
 //! ```
 //!
 //! The graphs are built for the Neural Engine: fp16, fully static shapes, and a KV cache the
@@ -18,7 +18,6 @@ mod model_helpers;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use model_helpers::Source;
 use ptts_coreml::Weights;
 use ptts_coreml::package::write_mlpackage_with_weights;
 use ptts_coreml::phonon::{flow_lm as fl, mimi};
@@ -31,16 +30,8 @@ use std::path::{Path, PathBuf};
 struct Args {
     /// Output directory.
     out: PathBuf,
-    /// Hugging Face repo to download the checkpoint from.
-    #[arg(long, required_unless_present = "dir", conflicts_with = "dir")]
-    repo: Option<String>,
-
-    /// Hugging Face branch, tag, or commit. Use a commit to reproduce a release.
-    #[arg(long, conflicts_with = "dir")]
-    revision: Option<String>,
-    /// A local checkpoint directory instead of the Hub.
-    #[arg(long)]
-    dir: Option<PathBuf>,
+    #[arg(long, help = model_helpers::MODEL_HELP)]
+    model: String,
     /// Weights file inside the repo or directory, when it has several.
     #[arg(long)]
     weights: Option<String>,
@@ -75,14 +66,11 @@ fn write(out: &Path, name: &str, built: fl::Built) -> Result<()> {
 fn main() -> Result<()> {
     let args = Args::parse();
     tracing_subscriber::fmt().with_env_filter(model_helpers::LOG_DIRECTIVES).init();
-    let source = match args.dir.as_deref() {
-        Some(dir) => Source::Dir(dir),
-        None => Source::Hub {
-            repo: args.repo.as_deref().context("--repo or --dir is required")?,
-            revision: args.revision.as_deref(),
-        },
+    let options = model_helpers::ResolveOptions {
+        quant: args.quant.parse()?,
+        weights: args.weights.as_deref(),
     };
-    let ck = model_helpers::locate(source, args.weights.as_deref(), args.quant.parse()?)?;
+    let ck = model_helpers::Checkpoint::locate(&args.model, options)?;
     let cfg = &ck.config;
     let f = &cfg.flow_lm;
     let dims = fl::Dims {

@@ -1,7 +1,7 @@
 //! Generate speech from text on the command line.
 //!
 //! ```text
-//! ptts --dir /path/to/model --lang en "hello world" -o out.wav
+//! ptts --model /path/to/model --lang en "hello world" -o out.wav
 //! ```
 //!
 //! Everything between the text and the WAV file is [`ptts::synth::Synth`]; what
@@ -40,19 +40,8 @@ struct Args {
     #[arg(short, long, default_value_t = 4242424242424242)]
     seed: u64,
 
-    /// Hugging Face model repo to download the checkpoint from: config.json,
-    /// weights, tokenizer and voices.
-    #[arg(long, required_unless_present = "dir", conflicts_with = "dir")]
-    repo: Option<String>,
-
-    /// Hugging Face branch, tag, or commit. Use a commit to reproduce a release.
-    #[arg(long, conflicts_with = "dir")]
-    revision: Option<String>,
-
-    /// Load from a local directory holding config.json, weights, tokenizer and
-    /// voices/ instead of downloading from the Hugging Face Hub.
-    #[arg(long)]
-    dir: Option<std::path::PathBuf>,
+    #[arg(short, long, alias = "dir", help = model_helpers::MODEL_HELP)]
+    model: String,
 
     /// JSONL voice catalog to register, one `{"name", "filename"}` object per line with
     /// `filename` relative to the catalog. Its voices can then be picked with --voice.
@@ -132,17 +121,11 @@ fn main() -> Result<()> {
         xn::with_f16c()
     );
 
-    let source = match args.dir.as_deref() {
-        Some(dir) => model_helpers::Source::Dir(dir),
-        None => model_helpers::Source::Hub {
-            repo: args.repo.as_deref().context("--repo or --dir is required")?,
-            revision: args.revision.as_deref(),
-        },
-    };
     let quant = args.quant.as_deref().unwrap_or("f32").parse::<Quant>()?;
     let device = args.device.parse::<DeviceKind>()?;
     quant.check_device(device)?;
-    let mut checkpoint = model_helpers::locate(source, args.weights.as_deref(), quant)?;
+    let options = model_helpers::ResolveOptions { quant, weights: args.weights.as_deref() };
+    let mut checkpoint = model_helpers::Checkpoint::locate(&args.model, options)?;
     if let Some(catalog) = args.voice_catalog.as_deref() {
         checkpoint.add_voice_catalog(catalog)?;
     }
@@ -296,22 +279,12 @@ mod tests {
     fn a_model_source_is_required_before_loading() {
         let err = Args::try_parse_from(["ptts", "--lang", "en", "hello"]).unwrap_err();
         assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
-        assert!(err.to_string().contains("--repo"));
+        assert!(err.to_string().contains("--model"));
     }
 
     #[test]
-    fn a_local_directory_rejects_a_hub_revision_before_loading() {
-        let err = Args::try_parse_from([
-            "ptts",
-            "--dir",
-            "./missing",
-            "--revision",
-            "test-commit",
-            "--lang",
-            "en",
-            "Hello",
-        ])
-        .unwrap_err();
-        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    fn dir_still_names_a_local_model() {
+        let args = Args::try_parse_from(["ptts", "--dir", "m", "--lang", "en", "hi"]).unwrap();
+        assert_eq!(args.model, "m");
     }
 }

@@ -1,4 +1,4 @@
-# PTTS_CONFIG=owner/model PTTS_LANG=en docker compose -f ptts-openai-server/compose.hub.yaml up
+# PTTS_MODEL=hf://owner/model PTTS_LANG=en docker compose -f ptts-openai-server/compose.hub.yaml up
 services:
   ptts-openai-server:
     image: "${PTTS_IMAGE:-ghcr.io/gradium-ai/ptts-openai-server:latest}"
@@ -7,8 +7,7 @@ services:
       # For Home Assistant, with PTTS_WYOMING_ADDR below.
       # - "10200:10200"
     environment:
-      PTTS_CONFIG: "${PTTS_CONFIG:?Set PTTS_CONFIG to a Hugging Face model repo}"
-      PTTS_REVISION: "${PTTS_REVISION:-main}"
+      PTTS_MODEL: "${PTTS_MODEL:?Set PTTS_MODEL to a Hugging Face model, hf://owner/name[@revision]}"
       PTTS_LANG: "${PTTS_LANG:?Set PTTS_LANG to a supported normalization language}"
       PTTS_QUANT: q8
       # Serve the Wyoming protocol, which Home Assistant uses, as well as the OpenAI API.

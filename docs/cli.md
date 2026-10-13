@@ -41,14 +41,14 @@ On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](
 brew install gradium-ai/tap/ptts
 ```
 
-Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.1` runtime preview and pins each release archive by SHA-256. It does not include a model. Supply one with `--dir` or `--repo` when running `ptts`.
+Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.1` runtime preview and pins each release archive by SHA-256. It does not include a model. Supply one with `--model` when running `ptts`.
 
 After a new formula version is published, run `brew update` and `brew upgrade gradium-ai/tap/ptts`. The platform and CPU requirements above still apply.
 
 ## Generate speech
 
 ```sh
-ptts --dir /path/to/model --lang en --quant q8 "Hello world" -o out.wav
+ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
 The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports.
@@ -56,10 +56,10 @@ The folder must contain `config.json`, `tokenizer.json`, weights, and any requir
 You can also use a Hugging Face repo:
 
 ```sh
-ptts --repo <owner/model> --revision <commit> --lang en --quant q8 "Hello world" -o out.wav
+ptts --model hf://<owner>/<model>@<commit> --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-All files use the specified revision. Without `--revision`, the repo's current main revision is used. Private models require `HF_TOKEN` or a saved Hugging Face login. Cached files are reused. Local folders require no download.
+All files use the revision after `@`. Without one, the repo's current main revision is used. Private models require `HF_TOKEN` or a saved Hugging Face login. Cached files are reused. Local folders require no download.
 
 Use `--voice <name>` for a bundled voice, `--voice /path/to/voice.safetensors` for an embedding, or a short audio file for voice cloning when the checkpoint supports it. With no voice argument, the checkpoint's default voice is used. `ptts --help` lists the remaining options, including `--threads` for CPU tuning. `ptts --version` reports the runtime version.
 

@@ -304,12 +304,9 @@ mod tests {
     async fn admission_rejects_overload_and_recovers_after_disconnect_and_failure() {
         use ptts::synth::{DeviceKind, Quant};
         use std::future::Future;
-        let path = std::path::PathBuf::from(
-            std::env::var("PTTS_TEST_MODEL").expect("set PTTS_TEST_MODEL"),
-        );
+        let path = std::env::var("PTTS_TEST_MODEL").expect("set PTTS_TEST_MODEL");
         let app = crate::model::load_ptts(
             &path,
-            None,
             None,
             None,
             DeviceKind::Cpu,
