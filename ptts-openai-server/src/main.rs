@@ -2,7 +2,6 @@ mod api;
 mod encoder;
 mod model;
 mod mp3;
-mod utils;
 mod wyoming;
 
 use anyhow::{Context, Result};
@@ -30,12 +29,18 @@ struct Args {
     #[arg(long, default_value = "1", env = "PTTS_MAX_CONCURRENT_REQUESTS", value_parser = parse_request_limit)]
     max_concurrent_requests: std::num::NonZeroUsize,
 
-    /// Required local model directory, config.json, or Hugging Face repo ID.
-    #[arg(long, env = "PTTS_CONFIG", required = true)]
-    config: std::path::PathBuf,
+    /// Required. Model to load: a local checkpoint folder or a `config.json` in one, or a Hugging
+    /// Face repo as `hf://owner/name` or `hf://owner/name@revision`. Use a commit as the revision
+    /// to reproduce a release.
+    #[arg(long, env = "PTTS_MODEL", required_unless_present = "config", conflicts_with = "config")]
+    model: Option<String>,
 
-    /// Hugging Face branch, tag, or commit. Use a commit to reproduce a release.
-    #[arg(long, env = "PTTS_REVISION")]
+    /// Deprecated: a local model or a bare Hugging Face repo ID. Use --model.
+    #[arg(long, env = "PTTS_CONFIG", hide = true)]
+    config: Option<String>,
+
+    /// Deprecated: the revision of --config. Use --model hf://owner/name@revision.
+    #[arg(long, env = "PTTS_REVISION", hide = true, requires = "config")]
     revision: Option<String>,
 
     /// Optional directory of additional voice safetensors to load. Each
@@ -89,6 +94,19 @@ struct Args {
     conditions: Vec<String>,
 }
 
+impl Args {
+    fn model_source(&self) -> Result<String> {
+        match (&self.model, &self.config) {
+            (Some(model), _) => Ok(model.clone()),
+            (None, Some(config)) => {
+                tracing::warn!("--config and --revision are deprecated: use --model (PTTS_MODEL)");
+                Ok(ptts::checkpoint::legacy_source(config, self.revision.as_deref())?)
+            }
+            (None, None) => anyhow::bail!("--model is required"),
+        }
+    }
+}
+
 fn parse_request_limit(value: &str) -> Result<std::num::NonZeroUsize, String> {
     let limit: std::num::NonZeroUsize = value.parse().map_err(|e| format!("{e}"))?;
     if limit.get() > tokio::sync::Semaphore::MAX_PERMITS {
@@ -117,9 +135,8 @@ async fn main() -> Result<()> {
     init_tracing();
     let args = Args::parse();
 
-    // The checkpoint is downloaded with hf-hub's async client on this runtime.
-    // The weight loading that follows is CPU-bound and blocks the runtime
-    // thread, which is fine here: nothing is served until it is done.
+    // The weight loading after the download is CPU-bound and blocks the runtime thread, which is
+    // fine here: nothing is served until it is done.
     let app_state = build_app_state(&args).await?;
 
     if let Some(addr) = &args.wyoming_addr {
@@ -168,8 +185,7 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
         conditions.push((name.to_string(), value.to_string()));
     }
     model::load_ptts(
-        &args.config,
-        args.revision.as_deref(),
+        &args.model_source()?,
         args.voice_dir.as_ref(),
         args.voice_catalog.as_deref(),
         device,
@@ -188,13 +204,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_limit_is_positive_and_defaults_to_one() {
-        assert!(parse_request_limit(&usize::MAX.to_string()).is_err());
-        let args = Args::try_parse_from(["server", "--config", "model", "--lang", "none"]).unwrap();
-        assert_eq!(args.max_concurrent_requests.get(), 1);
+    fn the_deprecated_config_flag_still_names_a_model() {
         let args = Args::try_parse_from([
             "server",
             "--config",
+            "owner/model",
+            "--revision",
+            "abc",
+            "--lang",
+            "none",
+        ])
+        .unwrap();
+        assert_eq!(args.model_source().unwrap(), "hf://owner/model@abc");
+        let both = ["server", "--model", "a", "--config", "b", "--lang", "none"];
+        assert!(Args::try_parse_from(both).is_err());
+    }
+
+    #[test]
+    fn request_limit_is_positive_and_defaults_to_one() {
+        assert!(parse_request_limit(&usize::MAX.to_string()).is_err());
+        let args = Args::try_parse_from(["server", "--model", "model", "--lang", "none"]).unwrap();
+        assert_eq!(args.max_concurrent_requests.get(), 1);
+        let args = Args::try_parse_from([
+            "server",
+            "--model",
             "model",
             "--lang",
             "none",
@@ -206,7 +239,7 @@ mod tests {
         assert!(
             Args::try_parse_from([
                 "server",
-                "--config",
+                "--model",
                 "model",
                 "--lang",
                 "none",

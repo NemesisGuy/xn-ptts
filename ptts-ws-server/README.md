@@ -1,13 +1,13 @@
 # Phonon WebSocket server
 
-Run with a checkpoint folder or Hugging Face repo ID:
+Run with a checkpoint folder, or a Hugging Face repo as `hf://owner/name`:
 
 ```bash
 cargo run --release -p ptts-ws-server -- \
-  --config "$MODEL_DIR" --quant q8 --lang en
+  --model "$MODEL_DIR" --quant q8 --lang en
 ```
 
-The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts`. `--addr` changes the address. The checkpoint supplies its config, tokenizer, weights, and voices; `--revision` selects a Hub revision. Building requires libopus (`apt-get install libopus-dev` or `brew install opus`).
+The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts`. `--addr` changes the address. The checkpoint supplies its config, tokenizer, weights, and voices; `--model hf://owner/name@revision` selects a Hub revision. Building requires libopus (`apt-get install libopus-dev` or `brew install opus`).
 
 By default, one WebSocket session is accepted at a time. `--max-concurrent-requests N` sets a positive limit. Excess connections receive HTTP 429 before the WebSocket upgrade, with a message asking the client to retry after an active session closes.
 

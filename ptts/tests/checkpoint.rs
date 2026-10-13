@@ -2,7 +2,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use ptts::Error;
-use ptts::checkpoint::{Checkpoint, ResolveOptions, is_local_source};
+use ptts::checkpoint::{Checkpoint, ResolveOptions, legacy_source};
 use ptts::synth::Quant;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -148,21 +148,36 @@ fn symlinked_configs_keep_the_snapshot_directory() {
 }
 
 #[test]
-fn missing_local_paths_are_not_mistaken_for_hub_ids() {
+fn only_hf_sources_are_hub_repos() {
+    let opts = ResolveOptions::default();
     for path in ["./missing", "../missing", "/missing/checkpoint", "missing/config.json"] {
-        assert!(is_local_source(Path::new(path)), "{path}");
-        assert!(matches!(Checkpoint::open(path), Err(Error::NotFound(_))), "{path}");
+        assert!(matches!(Checkpoint::locate(path, opts), Err(Error::NotFound(_))), "{path}");
     }
-    assert!(!is_local_source(Path::new("owner/model")));
+    let Err(Error::NotFound(msg)) = Checkpoint::locate("owner/model", opts) else {
+        panic!("a bare repo ID is a missing local path")
+    };
+    assert!(msg.contains("hf://owner/model"), "{msg}");
+    assert!(matches!(Checkpoint::locate("hf://owner", opts), Err(Error::InvalidArgument(_))));
+}
+
+#[test]
+fn legacy_sources_keep_their_meaning() {
+    for path in ["./missing", "../missing", "/missing/checkpoint", "missing/config.json"] {
+        assert_eq!(legacy_source(path, None).unwrap(), path);
+        assert!(matches!(legacy_source(path, Some("main")), Err(Error::InvalidArgument(_))));
+    }
+    assert_eq!(legacy_source("owner/model", None).unwrap(), "hf://owner/model");
+    assert_eq!(legacy_source("owner/model", Some("abc")).unwrap(), "hf://owner/model@abc");
+    assert_eq!(legacy_source("hf://owner/model@abc", None).unwrap(), "hf://owner/model@abc");
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_drive_rooted_paths_are_local_sources() {
-    let path = Path::new(r"\missing\checkpoint");
-    assert!(path.has_root());
-    assert!(!path.is_absolute());
-    assert!(is_local_source(path));
+    let path = r"\missing\checkpoint";
+    assert!(Path::new(path).has_root());
+    assert!(!Path::new(path).is_absolute());
+    assert_eq!(legacy_source(path, None).unwrap(), path);
     assert!(matches!(Checkpoint::open(path), Err(Error::NotFound(_))));
 }
 

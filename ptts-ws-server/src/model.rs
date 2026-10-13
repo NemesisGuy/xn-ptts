@@ -5,9 +5,8 @@
 //! holding the result for the request handlers.
 
 use anyhow::{Context as _, Result};
-use ptts::checkpoint::{
-    Checkpoint, ResolveOptions, is_local_source, read_config, weight_candidates,
-};
+use ptts::checkpoint::{Checkpoint, ResolveOptions};
+use ptts::hub::HubSource;
 use ptts::preprocess::Normalize;
 use ptts::synth::{DeviceKind, Quant, Synth};
 use std::sync::Arc;
@@ -40,55 +39,33 @@ impl std::ops::Deref for AppState {
     }
 }
 
-/// Existing async Hub transport. Local candidates use the shared checkpoint resolver.
-async fn load_from_hf(repo_id: &str, revision: Option<&str>, quant: Quant) -> Result<Checkpoint> {
-    tracing::info!(repo_id, revision = revision.unwrap_or("main"), "downloading model artifacts");
-    let repo = crate::utils::HfRepo::model(repo_id, revision)?;
-    let config = read_config(repo.get("config.json").await?)?;
-    let mut weights = None;
-    let mut first_error = None;
-    for name in weight_candidates(quant) {
-        match repo.get(name).await {
-            Ok(path) => {
-                weights = Some(path);
-                break;
-            }
-            Err(e) => {
-                first_error.get_or_insert(e);
-            }
-        }
+/// Resolve `model`, `hf://owner/name[@revision]` or a local checkpoint folder or `config.json`
+/// in one, with the name it is reported by.
+async fn locate(model: &str, quant: Quant) -> Result<(Checkpoint, String)> {
+    let hub = HubSource::parse(model)?;
+    let source = model.to_string();
+    // The blocking Hub client runs its own runtime, which cannot be started inside this one.
+    let checkpoint = tokio::task::spawn_blocking(move || {
+        Checkpoint::locate(&source, ResolveOptions { quant, weights: None })
+    })
+    .await??;
+    if let Some(hub) = hub {
+        return Ok((checkpoint, hub.repo));
     }
-    let weights = weights
-        .ok_or_else(|| first_error.unwrap_or_else(|| anyhow::anyhow!("no weights in {repo_id}")))?;
-    let tokenizer = Some(repo.get("tokenizer.json").await?);
-    let mut voices = Vec::new();
-    let voice_files = repo.voice_files().await.unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "cannot list voice files; only the default voice file is tried");
-        Vec::new()
-    });
-    for (name, file) in voice_files {
-        match repo.get(&file).await {
-            Ok(path) => voices.push((name, path)),
-            Err(e) => {
-                tracing::warn!(voice = %name, error = %e, "failed to download voice embedding")
-            }
-        }
-    }
-    // A checkpoint with baked-in voices need not ship an external default.
-    if !voices.iter().any(|(name, _)| name == "default")
-        && let Ok(path) = repo.get(ptts::loader::DEFAULT_VOICE_FILE).await
-    {
-        voices.push(("default".to_string(), path));
-    }
-    voices.sort();
-    Ok(Checkpoint { config, weights, tokenizer, voices, quant })
+    let absolute = std::fs::canonicalize(model)?;
+    let dir = if absolute.is_dir() {
+        absolute.as_path()
+    } else {
+        absolute.parent().context("config has a parent directory")?
+    };
+    let name = dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    Ok((checkpoint, name))
 }
 
-/// Load an explicitly supplied local model directory/config or Hub repo ID.
+/// Load the model named by `model`. The source is required.
 #[allow(clippy::too_many_arguments)]
 pub async fn load_ptts(
-    config: &std::path::Path,
-    revision: Option<&str>,
+    model: &str,
     voice_dir: Option<&std::path::PathBuf>,
     voice_catalog: Option<&std::path::Path>,
     device: DeviceKind,
@@ -106,24 +83,7 @@ pub async fn load_ptts(
         tokio::sync::Semaphore::MAX_PERMITS
     );
     quant.check_device(device)?;
-    let (m, model_name) = match config {
-        path if is_local_source(path) => {
-            anyhow::ensure!(revision.is_none(), "--revision requires a Hugging Face repo ID");
-            let checkpoint = Checkpoint::resolve(path, ResolveOptions { quant, weights: None })?;
-            let absolute = std::fs::canonicalize(path)?;
-            let dir = if absolute.is_dir() {
-                absolute.as_path()
-            } else {
-                absolute.parent().context("config has a parent directory")?
-            };
-            let name = dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            (checkpoint, name)
-        }
-        repo_id => {
-            let repo_id = repo_id.to_str().context("invalid repo ID path")?;
-            (load_from_hf(repo_id, revision, quant).await?, repo_id.to_string())
-        }
-    };
+    let (m, model_name) = locate(model, quant).await?;
     let mut extra_voices = if let Some(voice_dir) = voice_dir {
         let found = ptts::loader::voices_in(voice_dir);
         if found.is_empty() {
@@ -197,8 +157,7 @@ mod checkpoint_tests {
         std::fs::write(extra_dir.join("invalid.safetensors"), b"unreadable optional voice")
             .unwrap();
         let loaded = load_ptts(
-            &path,
-            None,
+            path.to_str().unwrap(),
             Some(&extra_dir),
             None,
             DeviceKind::Cpu,

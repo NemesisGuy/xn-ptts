@@ -34,7 +34,7 @@ With [uv](https://docs.astral.sh/uv/) and a checkpoint folder, one line writes a
 uvx ptts --model /path/to/model --lang en --quant q8 "Hello from Phonon." -o speech.wav
 ```
 
-`--model` also takes a Hugging Face repo ID. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) for the files a checkpoint needs.
+`--model` also takes a Hugging Face repo as `hf://OWNER/MODEL`. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) for the files a checkpoint needs.
 
 ## What you get
 
@@ -111,7 +111,7 @@ For the shell examples below, set the folder once:
 export MODEL_DIR=/absolute/path/to/model
 ```
 
-The command line and Python can also acquire a checkpoint from Hugging Face. Use its repo ID and a fixed revision when you want a repeatable model version. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
+The command line, Python and the servers can also load a checkpoint from Hugging Face, named `hf://OWNER/MODEL`. Add a commit, as `hf://OWNER/MODEL@COMMIT_SHA`, when you want a repeatable model version. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
 
 `lang` is required and selects **text normalization**, such as how numbers and symbols are spoken. Choose `en`, `fr`, `de`, `es`, `pt`, or `none` to pass text through unchanged. This setting does not establish which languages a checkpoint can speak.
 
@@ -141,7 +141,7 @@ brew install gradium-ai/tap/ptts
 You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your `PATH`. Neither path needs Python or Rust. Generate a WAV with a supplied checkpoint:
 
 ```sh
-ptts --dir "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
+ptts --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
 ```
 
 The output is a mono 24 kHz WAV. Open it in your audio player.
@@ -151,7 +151,7 @@ If you prefer Cargo, install the command with `cargo install ptts --locked --fea
 To download a checkpoint instead, replace the example repo and revision with your own:
 
 ```sh
-ptts --repo OWNER/MODEL --revision COMMIT_SHA --lang en --quant q8 \
+ptts --model hf://OWNER/MODEL@COMMIT_SHA --lang en --quant q8 \
   "Hello from Phonon." -o speech.wav
 ```
 
@@ -176,7 +176,7 @@ Then save speech in four lines:
 import os
 import ptts
 
-tts = ptts.TTS(config=os.environ["MODEL_DIR"], lang="en", quant="q8")
+tts = ptts.TTS(os.environ["MODEL_DIR"], lang="en", quant="q8")
 tts.save("speech.wav", "Hello from Phonon.")
 ```
 
@@ -189,7 +189,7 @@ with tts.stream("Speech can play while the rest is being generated.") as audio:
         print(pcm.shape)
 ```
 
-Leaving the `with` block stops generation and releases its workers. For Hub loading, use `config="OWNER/MODEL"` and `revision="COMMIT_SHA"`.
+Leaving the `with` block stops generation and releases its workers. For Hub loading, pass `"hf://OWNER/MODEL@COMMIT_SHA"` as the model.
 
 The wheel also provides a command:
 
@@ -308,7 +308,7 @@ Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-
 ```sh
 PTTS_IMAGE="ghcr.io/gradium-ai/ptts-openai-server:<release-version>"
 docker run --rm -p 127.0.0.1:8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   "$PTTS_IMAGE"
 ```
 

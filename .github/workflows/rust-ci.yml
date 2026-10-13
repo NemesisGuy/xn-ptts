@@ -127,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for features in "" hf audio hf,audio cli; do
+          for features in "" hf audio hf,audio hub cli; do
             echo "::group::ptts --features ${features:-<none>}"
             cargo check -p ptts --no-default-features --features "$features" --all-targets
             echo "::endgroup::"
@@ -176,14 +176,14 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs -D warnings
         # `+nightly` explicitly: the stable toolchain installed above is the default by then.
-        run: cargo +nightly doc -p ptts --no-deps --features hf,audio
+        run: cargo +nightly doc -p ptts --no-deps --features hf,audio,hub
 
       # Stable has no `docsrs` cfg and so no `feature(doc_cfg)`; this is what a contributor
       # running `cargo doc` gets, and it has to stay clean too.
       - name: And as a contributor will
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo +stable doc -p ptts --no-deps --features hf,audio
+        run: cargo +stable doc -p ptts --no-deps --features hf,audio,hub
 
   wasm:
     name: Wasm

@@ -2873,7 +2873,6 @@ dependencies = [
  "axum",
  "clap",
  "futures-util",
- "hf-hub",
  "kaudio",
  "ptts",
  "serde",
@@ -2889,7 +2888,6 @@ dependencies = [
 name = "ptts-pyo3"
 version = "0.4.0-rc.1"
 dependencies = [
- "hf-hub",
  "numpy",
  "ptts",
  "pyo3",
@@ -2925,7 +2923,6 @@ dependencies = [
  "clap",
  "futures-util",
  "half",
- "hf-hub",
  "kaudio",
  "ptts",
  "rubato",

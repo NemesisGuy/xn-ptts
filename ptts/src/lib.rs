@@ -52,8 +52,9 @@
 //! compiling. The variants are failure classes, so a binding maps them onto its host language's
 //! exceptions in one match.
 //!
-//! [`checkpoint`] resolves explicitly supplied local model directories for native callers.
-//! The lower-level builder still accepts explicit files. The library never downloads weights.
+//! [`checkpoint`] resolves an explicitly supplied model for native callers: a local directory,
+//! or with the `hub` feature an `hf://owner/name` repo on the Hugging Face Hub, which is the only
+//! time the library downloads anything. The lower-level builder still accepts explicit files.
 //!
 //! Text is normalized before it is tokenized — see [`preprocess`]. Which
 //! language, or [`preprocess::Normalize::OFF`], is a required argument to
@@ -82,6 +83,8 @@ mod conv;
 mod dummy_quantizer;
 pub mod error;
 pub mod flow_lm;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hub;
 mod layer_scale;
 pub mod loader;
 pub mod mimi;

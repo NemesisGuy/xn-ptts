@@ -39,12 +39,12 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument(
         "-m",
         "--model",
-        help="required: Hugging Face repo ID or local model directory/config.json",
+        help="required: local model directory or config.json, or a Hugging Face repo as"
+        " hf://owner/name or hf://owner/name@revision",
     )
     p.add_argument(
         "-d", "--device", help=f"one of {', '.join(['auto', *available_devices()])} (default: auto)"
     )
-    p.add_argument("--revision", help="Hugging Face branch, tag, or commit")
     p.add_argument("--voice-catalog", help="JSONL voice catalog to register beside the checkpoint's voices")
     p.add_argument("-q", "--quant", help=f"weight format: {', '.join(available_quants())}")
     p.add_argument("-t", "--temperature", type=float, help="sampling temperature")
@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--lang is required: one of en, fr, de, es, pt, or none to skip it")
 
     if args.model is None:
-        parser.error("--model is required: a local model directory or Hugging Face repo ID")
+        parser.error("--model is required: a local model directory or hf://owner/name")
 
     if args.threads is not None:
         # After the arguments are checked, before the model loads: this sizes a global pool
@@ -92,17 +92,16 @@ def main(argv: list[str] | None = None) -> int:
 
     kwargs: dict[str, object] = {"lang": args.lang}
     for name in (
-        "config",
+        "model",
         "device",
         "quant",
         "voice",
         "seed",
         "temperature",
         "rewrites",
-        "revision",
         "voice_catalog",
     ):
-        value = getattr(args, {"config": "model"}.get(name, name))
+        value = getattr(args, name)
         if value is not None:
             kwargs[name] = value
     if args.condition:

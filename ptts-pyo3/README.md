@@ -8,7 +8,7 @@ To try a q8 checkpoint with [uv](https://docs.astral.sh/uv/), run:
 uvx ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-`uvx` handles the isolated Python environment and package dependencies. Until the stable release, use `uvx --prerelease allow ptts` to run the preview. Model files are supplied separately; `--model` accepts a local checkpoint directory or a Hugging Face repo ID.
+`uvx` handles the isolated Python environment and package dependencies. Until the stable release, use `uvx --prerelease allow ptts` to run the preview. Model files are supplied separately; `--model` accepts a local checkpoint directory or a Hugging Face repo as `hf://owner/name`.
 
 To use the Python API in your own environment, install the package:
 
@@ -24,7 +24,7 @@ python - <<'PY'
 import os
 import ptts
 
-tts = ptts.TTS(lang="en", config=os.environ["MODEL_DIR"], quant="q8")
+tts = ptts.TTS(os.environ["MODEL_DIR"], lang="en", quant="q8")
 print(tts.voices)
 tts.save("out.wav", "Hello world")
 PY
@@ -32,7 +32,7 @@ PY
 
 For a source install, use `uv add /path/to/xn-ptts/ptts-pyo3` or `pip install /path/to/xn-ptts/ptts-pyo3`. Source builds need Rust installed; supported CPython wheels do not. See the [development guide](https://github.com/gradium-ai/xn-ptts/blob/main/docs/development.md) for repository build commands.
 
-`config` must name a local directory, a `config.json`, or a Hugging Face repo ID. There is no default model. Local paths download nothing. Rust examples, Python, and both servers use the [shared checkpoint resolver](https://github.com/gradium-ai/xn-ptts/blob/main/ptts/src/checkpoint.rs). Every checkpoint supplies its own `config.json` and `tokenizer.json`. q8 prefers `model.q8.gguf`; other formats prefer `model.safetensors`. Voices come from `voices/` or `embeddings/`, plus `default-voice.safetensors` as `default`. Hub downloads use the supplied `revision` for all files.
+`model` must name a local directory, a `config.json`, or a Hugging Face repo as `"hf://owner/name"` or `"hf://owner/name@revision"`. There is no default model. Local paths download nothing. Rust examples, Python, and both servers use the [shared checkpoint resolver](https://github.com/gradium-ai/xn-ptts/blob/main/ptts/src/checkpoint.rs). Every checkpoint supplies its own `config.json` and `tokenizer.json`. q8 prefers `model.q8.gguf`; other formats prefer `model.safetensors`. Voices come from `voices/` or `embeddings/`, plus `default-voice.safetensors` as `default`. Hub downloads use the revision after `@` for all files. `config=` and `revision=` still work but are deprecated.
 
 `lang` is required: `en`, `fr`, `de`, `es` or `pt` picks how numbers, symbols and abbreviations are spelled out; `none` uses the text as written.
 

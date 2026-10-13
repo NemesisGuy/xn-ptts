@@ -7,7 +7,7 @@ services:
       # For Home Assistant, with PTTS_WYOMING_ADDR below.
       # - "10200:10200"
     environment:
-      PTTS_CONFIG: /models
+      PTTS_MODEL: /models
       PTTS_LANG: en
       PTTS_QUANT: q8
       # Serve the Wyoming protocol, which Home Assistant uses, as well as the OpenAI API.

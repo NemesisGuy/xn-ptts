@@ -28,10 +28,11 @@ __all__ = [
 class TTS:
     """A loaded Phonon model.
 
-    `config` must name a local directory/config.json or a Hugging Face repo ID.
-    There is no default model. Local paths never download anything; Hub files are
-    downloaded on first use and cached. `revision` selects a branch, tag, or commit
-    for every Hub file and is only accepted with a Hub source.
+    `model` must name a local directory or config.json, or a Hugging Face repo as
+    `"hf://owner/name"` or `"hf://owner/name@revision"`. There is no default model. Local paths
+    never download anything; Hub files are downloaded on first use and cached. The revision, a
+    branch, tag, or commit, applies to every Hub file. `config` and `revision` are the
+    deprecated older spelling, where a bare `"owner/name"` named a repo.
 
     `lang` is required and keyword-only: text is normalized before it is tokenized, and the
     spoken forms of `@`, `+` and `=` differ per language, so there is nothing safe to default
@@ -47,7 +48,7 @@ class TTS:
 
     def __init__(
         self,
-        config: str | None = None,
+        model: str | None = None,
         device: str | None = None,
         quant: str | None = None,
         voice: str | None = None,
@@ -59,8 +60,9 @@ class TTS:
         lang: str | None,
         rewrites: str | None = None,
         conditions: dict[str, str | float] | None = None,
-        revision: str | None = None,
         voice_catalog: str | PathLike[str] | None = None,
+        config: str | None = None,
+        revision: str | None = None,
     ) -> None: ...
     @property
     def sample_rate(self) -> int:

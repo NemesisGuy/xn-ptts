@@ -1,9 +1,10 @@
 //! Shared native checkpoint file resolution.
 //!
-//! [`Checkpoint::open`] accepts an explicitly supplied model directory or config file.
+//! [`Checkpoint::locate`] accepts an explicitly supplied model directory or config file, or a
+//! Hugging Face repo as `hf://owner/name[@revision]` (see [`crate::hub`]).
 //! Each checkpoint supplies its own config, tokenizer, weights, and optional voices.
-//! This module reads local files only. Frontends retain their own Hub transport.
 
+use crate::hub::HubSource;
 use crate::preprocess::Normalize;
 use crate::synth::{Quant, Synth, SynthBuilder};
 use crate::tts_model::TTSConfig;
@@ -40,6 +41,15 @@ pub struct Checkpoint {
 }
 
 impl Checkpoint {
+    /// Resolve a model source: `hf://owner/name[@revision]` on the Hugging Face Hub, which needs
+    /// the `hub` feature, or else a local model directory or config file.
+    pub fn locate(source: &str, options: ResolveOptions<'_>) -> Result<Self> {
+        match HubSource::parse(source)? {
+            Some(hub) => crate::hub::resolve(&hub, options),
+            None => Self::resolve(source, options),
+        }
+    }
+
     /// Resolve a supplied model directory or config file with default options.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         Self::resolve(path, ResolveOptions::default())
@@ -48,9 +58,20 @@ impl Checkpoint {
     pub fn resolve(path: impl AsRef<Path>, options: ResolveOptions<'_>) -> Result<Self> {
         let input = path.as_ref();
         let path = std::fs::canonicalize(input).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => {
-                Error::NotFound(format!("no checkpoint at {}", input.display()))
-            }
+            std::io::ErrorKind::NotFound => Error::NotFound(match input.to_str() {
+                // `owner/name` was how a Hub repo used to be given.
+                Some(s)
+                    if !s.starts_with(['.', '/'])
+                        && !s.ends_with(".json")
+                        && s.split('/').count() == 2 =>
+                {
+                    format!(
+                        "no checkpoint at {s}; for a Hugging Face repo, use {}{s}",
+                        crate::hub::SCHEME
+                    )
+                }
+                _ => format!("no checkpoint at {}", input.display()),
+            }),
             _ => Error::Io(e),
         })?;
         let (dir, config_path) = if path.is_dir() {
@@ -117,14 +138,26 @@ impl Checkpoint {
     }
 }
 
-/// Classify an explicitly supplied source before choosing local or Hub resolution.
-/// Nonexistent rooted, dot-prefixed, or JSON paths are local errors, not repo IDs.
-pub fn is_local_source(path: &Path) -> bool {
-    path.exists()
+/// The source [`Checkpoint::locate`] takes for the older way of naming a model, still accepted
+/// by the servers' `--config` and Python's `config=`: a local path, or a bare `owner/name` repo
+/// ID with a separate revision.
+pub fn legacy_source(config: &str, revision: Option<&str>) -> Result<String> {
+    let path = Path::new(config);
+    let local = path.exists()
         || path.has_root()
         || path.starts_with(".")
         || path.components().next().is_some_and(|c| c.as_os_str() == "..")
-        || path.extension().is_some_and(|ext| ext == "json")
+        || path.extension().is_some_and(|ext| ext == "json");
+    if local || config.starts_with(crate::hub::SCHEME) {
+        if revision.is_some() {
+            return Err(Error::InvalidArgument(
+                "a revision requires a Hugging Face repo ID".into(),
+            ));
+        }
+        return Ok(config.to_string());
+    }
+    let hub = HubSource { repo: config.to_string(), revision: revision.map(str::to_string) };
+    Ok(hub.to_string())
 }
 
 /// Read the checkpoint's config with consistent error classes and context.
@@ -140,7 +173,7 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<TTSConfig> {
         .map_err(|e| Error::InvalidData(format!("cannot parse config {}: {e}", path.display())))
 }
 
-fn validate_relative_path(path: &str) -> Result<()> {
+pub(crate) fn validate_relative_path(path: &str) -> Result<()> {
     if path.is_empty()
         || path.contains(['\\', ':'])
         || path.starts_with('/')

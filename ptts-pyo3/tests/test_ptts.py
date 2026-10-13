@@ -189,11 +189,15 @@ def test_thread_count_round_trips():
         # `src/lib.rs` is where that mapping lives, and this is what holds it to it.
         ({"quant": "q3k"}, ValueError, "q3k"),
         ({"device": "tpu"}, ValueError, "tpu"),
+        ({"model": "./missing", "revision": "test-commit"}, ValueError, "revision"),
         ({"config": "./missing", "revision": "test-commit"}, ValueError, "revision"),
-        ({"config": "/definitely/not/a/checkpoint/config.json"}, LookupError, "config.json"),
+        ({"model": "/definitely/not/a/checkpoint/config.json"}, LookupError, "config.json"),
+        ({"model": "owner/name"}, LookupError, "hf://owner/name"),
+        ({"model": "hf://owner"}, ValueError, "hf://owner"),
         ({"device": "cuda", "quant": "q8_0"}, NotImplementedError, "CPU-only"),
     ],
 )
+@pytest.mark.filterwarnings("ignore:config= and revision= are deprecated:DeprecationWarning")
 def test_a_bad_argument_raises_its_class_and_names_itself(kwargs, exc, needle):
     with pytest.raises(exc) as e:
         ptts.TTS(**kwargs, lang="en")
@@ -219,14 +223,13 @@ def test_nothing_is_downloaded_before_the_arguments_are_checked():
 
 @pytest.fixture(scope="module")
 def tts() -> ptts.TTS:
-    # Private rehearsals use the installed wheel and a local directory or Hub repo ID.
+    # Private rehearsals use the installed wheel and a local directory or hf:// repo.
     # Model tests require an explicit checkpoint; ordinary wheel checks need none.
     model = os.environ.get("PTTS_TEST_MODEL")
     if not model:
         pytest.skip("set PTTS_TEST_MODEL for checkpoint synthesis tests")
     return ptts.TTS(
-        config=model,
-        revision=os.environ.get("PTTS_TEST_REVISION"),
+        model,
         lang="en",
         device="cpu",
         quant="q8",

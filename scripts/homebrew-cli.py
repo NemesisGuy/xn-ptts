@@ -50,7 +50,7 @@ def main():
         "    <<~EOS",
         "      Intel/x86_64 downloads require an x86-64-v3 CPU (AVX2, FMA, F16C).",
         "      Linux downloads require glibc 2.35 or later.",
-        "      Supply a model with --dir or --repo and a language with --lang.",
+        "      Supply a model with --model and a language with --lang.",
         "    EOS",
         "  end",
         "",
