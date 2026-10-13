@@ -5,7 +5,9 @@
 //! `end_of_stream`. The server answers `ready`, then for every 80 ms frame of audio a `step`
 //! message with the voice-activity probabilities, and `text` / `end_text` as words close.
 //! On `end_of_stream` it pads the last frame, runs the model's text delay out on silence so
-//! the last words arrive, and ends with `end_of_stream`.
+//! the last words arrive, and ends with `end_of_stream`. A `peek` gets the same last words
+//! without ending anything: the delay is run out on a copy of the stream, which is then
+//! dropped, so the live stream never hears that silence.
 //!
 //! Inference runs on a blocking thread per session; the async side only parses, buffers and
 //! forwards. Both directions are bounded, so a client sending faster than real time is slowed
@@ -13,7 +15,7 @@
 
 use crate::asr::{AsrApp, AsrInner, Recognizer, RecognizerStream};
 use crate::handler::{IDLE_TIMEOUT, SEND_TIMEOUT, cancelled, forward_replies, read_requests};
-use crate::protocol::{SttReply, SttRequest, VadPrediction, error_codes};
+use crate::protocol::{PeekWord, SttReply, SttRequest, VadPrediction, error_codes};
 use anyhow::Result;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -100,6 +102,9 @@ enum Input {
     /// One frame of [`FRAME_SIZE`] samples, holding `real` samples of the client's audio
     /// (fewer only for the zero-padded last frame).
     Frame { pcm: Vec<f32>, real: usize },
+    /// Answer a `peek`: run `partial` (the client's audio short of a frame, buffered here)
+    /// and the text delay on a fork of the stream, and send the words that come out.
+    Peek { peek_id: u64, partial: Vec<f32> },
     /// Run the text delay out on silence, then send `end_of_stream`.
     Finish,
 }
@@ -206,6 +211,13 @@ pub(crate) async fn run_session(
                         // The inference thread stopped; its error is reported below.
                         break 'session Ok(());
                     }
+                }
+            }
+            (Some((frames, _)), SttRequest::Peek { peek_id }) => {
+                // The partial frame stays buffered for the live stream; the fork gets a copy.
+                let partial = pending.clone();
+                if frames.send(Input::Peek { peek_id, partial }).await.is_err() {
+                    break 'session Ok(());
                 }
             }
             (Some((frames, _)), SttRequest::EndOfStream) => {
@@ -333,6 +345,17 @@ fn infer(
                     return Ok(());
                 }
             }
+            Input::Peek { peek_id, partial } => {
+                let words = peek(recognizer.as_ref(), stream.as_ref(), &partial)?;
+                let reply = SttReply::PeekResult {
+                    peek_id,
+                    total_duration_s: (samples + partial.len()) as f64 / SAMPLE_RATE as f64,
+                    words,
+                };
+                if replies.blocking_send(reply).is_err() {
+                    return Ok(());
+                }
+            }
             Input::Finish => {
                 // Only the words: the silence is ours, not the client's, so it gets no steps.
                 let silence = vec![0f32; FRAME_SIZE];
@@ -348,6 +371,34 @@ fn infer(
         }
     }
     Ok(())
+}
+
+/// The words `stream` would still send if the audio ended after `partial` (fewer than
+/// [`FRAME_SIZE`] samples): what `end_of_stream` would flush, computed on a fork.
+fn peek(
+    recognizer: &dyn Recognizer,
+    stream: &dyn RecognizerStream,
+    partial: &[f32],
+) -> Result<Vec<PeekWord>> {
+    let mut fork = stream.fork()?;
+    let mut events = vec![];
+    if !partial.is_empty() {
+        let mut pcm = partial.to_vec();
+        pcm.resize(FRAME_SIZE, 0.0);
+        events.extend(fork.step(&pcm)?.events);
+    }
+    let silence = vec![0f32; FRAME_SIZE];
+    for _ in 0..recognizer.delay_frames() + 1 {
+        events.extend(fork.step(&silence)?.events);
+    }
+    events
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::Word { tokens, start_time } => Some((tokens, start_time)),
+            Event::EndWord { .. } | Event::EndOfStream => None,
+        })
+        .map(|(tokens, start_s)| Ok(PeekWord { text: recognizer.decode(&tokens)?, start_s }))
+        .collect()
 }
 
 /// Send a step's words; false once the client is gone.

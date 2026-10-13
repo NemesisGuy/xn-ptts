@@ -25,6 +25,8 @@ pub trait Recognizer: Send + Sync {
 /// One stream being transcribed: [`ptts::asr::FRAME_SIZE`] samples in, a [`Step`] out.
 pub trait RecognizerStream: Send {
     fn step(&mut self, pcm: &[f32]) -> Result<Step>;
+    /// An independent copy of the stream: stepping it leaves `self` exactly as it was.
+    fn fork(&self) -> Result<Box<dyn RecognizerStream>>;
 }
 
 struct PttsRecognizer {
@@ -55,6 +57,10 @@ impl Recognizer for PttsRecognizer {
 impl RecognizerStream for PttsStream {
     fn step(&mut self, pcm: &[f32]) -> Result<Step> {
         Ok(self.0.step(pcm)?)
+    }
+
+    fn fork(&self) -> Result<Box<dyn RecognizerStream>> {
+        Ok(Box::new(PttsStream(self.0.fork()?)))
     }
 }
 

@@ -28,6 +28,15 @@ fn replies_carry_every_field_and_round_trip() {
         SttReply::EndText { stop_s: 2.0, stream_id: 0 },
         SttReply::Error { code: 501, message: "m".into() },
         SttReply::EndOfStream,
+        SttReply::PeekResult {
+            peek_id: 7,
+            total_duration_s: 1.25,
+            words: vec![
+                PeekWord { text: "hello".into(), start_s: 0.5 },
+                PeekWord { text: "there".into(), start_s: 0.75 },
+            ],
+        },
+        SttReply::PeekResult { peek_id: 8, total_duration_s: 0.0, words: vec![] },
     ];
     let expected = [
         r#"{"type":"ready","model_name":"asr","sample_rate":24000,"frame_size":1920,"delay_in_frames":10.0,"text_stream_names":[],"request_id":"id"}"#,
@@ -36,6 +45,8 @@ fn replies_carry_every_field_and_round_trip() {
         r#"{"type":"end_text","stop_s":2.0,"stream_id":0}"#,
         r#"{"type":"error","code":501,"message":"m"}"#,
         r#"{"type":"end_of_stream"}"#,
+        r#"{"type":"peek_result","peek_id":7,"total_duration_s":1.25,"words":[{"text":"hello","start_s":0.5},{"text":"there","start_s":0.75}]}"#,
+        r#"{"type":"peek_result","peek_id":8,"total_duration_s":0.0,"words":[]}"#,
     ];
     for (reply, json) in replies.iter().zip(expected) {
         assert_eq!(serde_json::to_string(reply).unwrap(), json);
@@ -64,6 +75,13 @@ fn requests_parse_as_the_voice_agent_sends_them() {
     assert!(matches!(&audio, SttRequest::Audio { audio } if audio == "AAE="));
     let eos: SttRequest = serde_json::from_str(r#"{"type":"end_of_stream"}"#).unwrap();
     assert!(matches!(eos, SttRequest::EndOfStream));
+    let peek: SttRequest = serde_json::from_str(r#"{"type":"peek","peek_id":42}"#).unwrap();
+    assert!(matches!(peek, SttRequest::Peek { peek_id: 42 }));
+    // u64 ids, the full range.
+    let peek: SttRequest =
+        serde_json::from_value(serde_json::json!({"type": "peek", "peek_id": u64::MAX})).unwrap();
+    assert!(matches!(peek, SttRequest::Peek { peek_id: u64::MAX }));
+    assert!(serde_json::from_str::<SttRequest>(r#"{"type":"peek"}"#).is_err());
 }
 
 #[test]
@@ -89,10 +107,14 @@ fn pcm_bytes_split_anywhere_decode_to_the_same_samples() {
 struct FakeRecognizer {
     frames: Arc<Mutex<Vec<Vec<f32>>>>,
     started: Arc<Mutex<Vec<Option<String>>>>,
+    forked: Arc<Mutex<Vec<Vec<f32>>>>,
 }
 
 struct FakeStream {
+    /// Where this stream logs its frames: the recognizer's `frames` for a live stream, its
+    /// `forked` for a fork.
     frames: Arc<Mutex<Vec<Vec<f32>>>>,
+    forked: Arc<Mutex<Vec<Vec<f32>>>>,
     seen: usize,
 }
 
@@ -101,7 +123,11 @@ const DELAY: usize = 2;
 impl Recognizer for FakeRecognizer {
     fn stream(&self, language: Option<&str>) -> Result<Box<dyn RecognizerStream>> {
         self.started.lock().unwrap().push(language.map(str::to_owned));
-        Ok(Box::new(FakeStream { frames: self.frames.clone(), seen: 0 }))
+        Ok(Box::new(FakeStream {
+            frames: self.frames.clone(),
+            forked: self.forked.clone(),
+            seen: 0,
+        }))
     }
 
     fn delay_frames(&self) -> usize {
@@ -135,15 +161,37 @@ impl RecognizerStream for FakeStream {
             .collect();
         Ok(Step { events, vad })
     }
+
+    fn fork(&self) -> Result<Box<dyn RecognizerStream>> {
+        Ok(Box::new(FakeStream {
+            frames: self.forked.clone(),
+            forked: self.forked.clone(),
+            seen: self.seen,
+        }))
+    }
 }
 
 #[allow(clippy::type_complexity)]
 fn fake_app() -> (Arc<AsrInner>, Arc<Mutex<Vec<Vec<f32>>>>, Arc<Mutex<Vec<Option<String>>>>) {
+    let (app, frames, started, _) = fake_app_with_forks();
+    (app, frames, started)
+}
+
+type FrameLog = Arc<Mutex<Vec<Vec<f32>>>>;
+
+/// [`fake_app`], plus the log of the frames its streams' forks were fed.
+#[allow(clippy::type_complexity)]
+fn fake_app_with_forks() -> (Arc<AsrInner>, FrameLog, Arc<Mutex<Vec<Option<String>>>>, FrameLog) {
     let frames = Arc::new(Mutex::new(vec![]));
     let started = Arc::new(Mutex::new(vec![]));
-    let recognizer = Arc::new(FakeRecognizer { frames: frames.clone(), started: started.clone() });
+    let forked = Arc::new(Mutex::new(vec![]));
+    let recognizer = Arc::new(FakeRecognizer {
+        frames: frames.clone(),
+        started: started.clone(),
+        forked: forked.clone(),
+    });
     let app = AsrApp::new(recognizer, "fake".into(), std::num::NonZeroUsize::new(1).unwrap());
-    (app.0.unwrap(), frames, started)
+    (app.0.unwrap(), frames, started, forked)
 }
 
 fn text(msg: impl serde::Serialize) -> Message {
@@ -175,6 +223,10 @@ fn setup_message(json_config: Option<&str>, input_format: &str) -> Message {
 
 /// Run a session over `messages` and collect every reply.
 async fn run(app: Arc<AsrInner>, messages: Vec<Message>) -> Vec<SttReply> {
+    run_within(app, messages, Duration::from_secs(10)).await
+}
+
+async fn run_within(app: Arc<AsrInner>, messages: Vec<Message>, limit: Duration) -> Vec<SttReply> {
     let (request_tx, mut request_rx) = mpsc::channel(messages.len() + 1);
     for m in messages {
         request_tx.send(m).await.unwrap();
@@ -182,13 +234,10 @@ async fn run(app: Arc<AsrInner>, messages: Vec<Message>) -> Vec<SttReply> {
     drop(request_tx);
     let (reply_tx, mut reply_rx) = mpsc::channel(1024);
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        run_session(app, &mut request_rx, &reply_tx, &mut cancel_rx),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    tokio::time::timeout(limit, run_session(app, &mut request_rx, &reply_tx, &mut cancel_rx))
+        .await
+        .unwrap()
+        .unwrap();
     drop(reply_tx);
     let mut replies = vec![];
     while let Some(r) = reply_rx.recv().await {
@@ -290,6 +339,147 @@ async fn setup_errors_are_reported_and_the_session_continues() {
     assert!(message.contains("en, fr"), "{message}");
     // No language: the model picks.
     assert_eq!(started.lock().unwrap().as_slice(), [None]);
+}
+
+fn peek_message(peek_id: u64) -> Message {
+    text(serde_json::json!({"type": "peek", "peek_id": peek_id}))
+}
+
+/// The replies with every `peek_result` left out, and `ready`'s random request id blanked.
+fn without_peeks(replies: &[SttReply]) -> Vec<SttReply> {
+    replies
+        .iter()
+        .filter(|r| !matches!(r, SttReply::PeekResult { .. }))
+        .cloned()
+        .map(|r| match r {
+            SttReply::Ready {
+                request_id: _,
+                model_name,
+                sample_rate,
+                frame_size,
+                delay_in_frames,
+                text_stream_names,
+            } => SttReply::Ready {
+                request_id: String::new(),
+                model_name,
+                sample_rate,
+                frame_size,
+                delay_in_frames,
+                text_stream_names,
+            },
+            r => r,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn peeks_answer_in_order_with_the_audio_and_leave_the_stream_alone() {
+    let level = 8192i16; // 0.25
+    let one_and_a_half = vec![level; FRAME_SIZE * 3 / 2];
+    let one = vec![level; FRAME_SIZE];
+    let session = |peeks: bool| {
+        let mut messages = vec![setup_message(None, "pcm"), audio_message(&one_and_a_half)];
+        if peeks {
+            messages.push(peek_message(1));
+        }
+        messages.push(audio_message(&one));
+        if peeks {
+            messages.extend([peek_message(2), peek_message(u64::MAX)]);
+        }
+        messages.push(text(serde_json::json!({"type": "end_of_stream"})));
+        messages
+    };
+
+    let (app, frames, _, forked) = fake_app_with_forks();
+    let plain = run(app, session(false)).await;
+    assert!(forked.lock().unwrap().is_empty());
+    let plain_frames = std::mem::take(&mut *frames.lock().unwrap());
+
+    let (app, frames, _, forked) = fake_app_with_forks();
+    let peeked = run(app, session(true)).await;
+    // The live stream saw exactly the same frames and said exactly the same things.
+    assert_eq!(without_peeks(&peeked), without_peeks(&plain));
+    assert_eq!(*frames.lock().unwrap(), plain_frames);
+
+    // Each peek lands after the steps of the audio sent before it, and before any later one.
+    let kinds: Vec<String> = peeked
+        .iter()
+        .map(|r| match r {
+            SttReply::Step { step_idx, .. } => format!("step{step_idx}"),
+            SttReply::PeekResult { peek_id, .. } => format!("peek{peek_id}"),
+            SttReply::Ready { .. } => "ready".into(),
+            SttReply::Text { .. } => "text".into(),
+            SttReply::EndText { .. } => "end_text".into(),
+            SttReply::EndOfStream => "eos".into(),
+            other => panic!("unexpected {other:?}"),
+        })
+        .collect();
+    let max = format!("peek{}", u64::MAX);
+    assert_eq!(
+        kinds,
+        [
+            "ready", "step0", "peek1", "step1", "text", "peek2", &max, "step2", "end_text", "text",
+            "text", "text", "eos"
+        ]
+    );
+    let peeks: Vec<_> = peeked
+        .iter()
+        .filter_map(|r| match r {
+            SttReply::PeekResult { peek_id, total_duration_s, words } => {
+                Some((*peek_id, *total_duration_s, words.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    let word = |text: &str, start_s| PeekWord { text: text.into(), start_s };
+    // Peek 1 covers one frame and a half: the fork steps the padded half frame (the fake's
+    // second frame, which closes "w7+w8"), then DELAY + 1 frames of silence.
+    assert_eq!(peeks[0].0, 1);
+    assert!((peeks[0].1 - 0.12).abs() < 1e-9, "the buffered half frame counts");
+    assert_eq!(peeks[0].2, [word("w7+w8", 0.1), word("w9", 0.3), word("w9", 0.3)]);
+    // "w7+w8" has gone out as `text` by then, so peeks 2 and 3 do not repeat it.
+    for (id, (peek_id, total_duration_s, words)) in [2, u64::MAX].into_iter().zip(&peeks[1..]) {
+        assert_eq!(*peek_id, id);
+        assert!((total_duration_s - 0.2).abs() < 1e-9);
+        assert_eq!(*words, [word("w9", 0.3), word("w9", 0.3), word("w9", 0.3)]);
+    }
+
+    // Every fork got a copy of the buffered half frame, padded, then the silence.
+    let forked = forked.lock().unwrap();
+    assert_eq!(forked.len(), 3 * (1 + DELAY + 1));
+    for fork in forked.chunks(1 + DELAY + 1) {
+        assert!(fork[0][..FRAME_SIZE / 2].iter().all(|&x| x == 0.25));
+        assert!(fork[0][FRAME_SIZE / 2..].iter().all(|&x| x == 0.0));
+        assert!(fork[1..].iter().all(|f| f.iter().all(|&x| x == 0.0)));
+    }
+}
+
+#[tokio::test]
+async fn a_peek_before_setup_is_a_protocol_error() {
+    let (app, frames, _, forked) = fake_app_with_forks();
+    let replies = run(
+        app,
+        vec![
+            peek_message(1),
+            setup_message(None, "pcm"),
+            peek_message(2),
+            text(serde_json::json!({"type": "end_of_stream"})),
+        ],
+    )
+    .await;
+    let SttReply::Error { code: 400, message } = &replies[0] else {
+        panic!("expected a 400, got {:?}", replies[0])
+    };
+    assert!(message.contains("setup"), "{message}");
+    assert!(matches!(replies[1], SttReply::Ready { .. }));
+    // No audio yet: the fork runs only the silence.
+    let SttReply::PeekResult { peek_id: 2, total_duration_s, .. } = replies[2] else {
+        panic!("expected peek 2, got {:?}", replies[2])
+    };
+    assert_eq!(total_duration_s, 0.0);
+    assert_eq!(forked.lock().unwrap().len(), DELAY + 1);
+    assert_eq!(frames.lock().unwrap().len(), DELAY + 1, "only end_of_stream's flush");
+    assert!(matches!(replies.last(), Some(SttReply::EndOfStream)));
 }
 
 #[tokio::test]
@@ -444,4 +634,126 @@ async fn a_session_decodes_with_the_voice_agents_reply_shapes() {
     let error = serde_json::to_string(&SttReply::Error { code: 400, message: "m".into() }).unwrap();
     let A::Error { code, message } = serde_json::from_str(&error).unwrap() else { panic!() };
     assert_eq!((code, message.as_str()), (Some(serde_json::json!(400)), "m"));
+}
+
+// ---- The real model ----
+
+/// The samples of a 16-bit PCM WAV file's first channel.
+fn read_wav_s16(path: &std::path::Path) -> Vec<i16> {
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(&bytes[..4], b"RIFF", "{} is not a WAV file", path.display());
+    let (mut pos, mut channels) = (12, 1);
+    while pos + 8 <= bytes.len() {
+        let len = u32::from_le_bytes(bytes[pos + 4..pos + 8].try_into().unwrap()) as usize;
+        let body = &bytes[pos + 8..(pos + 8 + len).min(bytes.len())];
+        match &bytes[pos..pos + 4] {
+            b"fmt " => {
+                assert_eq!(u16::from_le_bytes([body[0], body[1]]), 1, "not PCM");
+                channels = u16::from_le_bytes([body[2], body[3]]) as usize;
+                let rate = u32::from_le_bytes(body[4..8].try_into().unwrap());
+                assert_eq!(rate, SAMPLE_RATE as u32, "resample to 24 kHz first");
+                assert_eq!(u16::from_le_bytes([body[14], body[15]]), 16, "not 16-bit");
+            }
+            b"data" => {
+                return body
+                    .chunks_exact(2 * channels)
+                    .map(|s| i16::from_le_bytes([s[0], s[1]]))
+                    .collect();
+            }
+            _ => {}
+        }
+        pos += 8 + len + (len & 1);
+    }
+    panic!("{} has no data chunk", path.display())
+}
+
+/// Same audio with and without a peek every half second: the live stream's replies must be
+/// identical, and the last peek must predict exactly what `end_of_stream` then flushes.
+///
+/// `cargo test --release -p ptts-ws-server -- --ignored peeks_on_the_real_model`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires PTTS_TEST_ASR_MODEL (a speech-recognition checkpoint folder with a \
+            tokenizer.json) and PTTS_TEST_ASR_AUDIO (24 kHz mono 16-bit WAV of speech)"]
+async fn peeks_on_the_real_model_leave_the_live_stream_bit_for_bit_alone() {
+    let dir = std::env::var("PTTS_TEST_ASR_MODEL").expect("set PTTS_TEST_ASR_MODEL");
+    let audio = std::env::var("PTTS_TEST_ASR_AUDIO").expect("set PTTS_TEST_ASR_AUDIO");
+    let app = crate::asr::load_asr(
+        std::path::Path::new(&dir),
+        None,
+        None,
+        ptts::synth::Quant::Q80,
+        std::num::NonZeroUsize::new(1).unwrap(),
+    )
+    .await
+    .unwrap()
+    .0
+    .unwrap();
+    let samples = read_wav_s16(std::path::Path::new(&audio));
+    // Half a second per message: 6.25 frames, so the peeks see every partial-frame length.
+    let chunks: Vec<&[i16]> = samples.chunks(SAMPLE_RATE / 2).collect();
+    let session = |peeks: bool| {
+        let mut messages = vec![setup_message(Some(r#"{"language":"en"}"#), "pcm")];
+        if peeks {
+            messages.push(peek_message(0));
+        }
+        for (i, chunk) in chunks.iter().enumerate() {
+            messages.push(audio_message(chunk));
+            if peeks {
+                messages.push(peek_message(i as u64 + 1));
+            }
+        }
+        messages.push(text(serde_json::json!({"type": "end_of_stream"})));
+        messages
+    };
+    let limit = Duration::from_secs(300);
+    let plain = run_within(app.clone(), session(false), limit).await;
+    let peeked = run_within(app, session(true), limit).await;
+
+    assert_eq!(without_peeks(&peeked), without_peeks(&plain));
+    let words: Vec<_> = plain
+        .iter()
+        .filter_map(|r| match r {
+            SttReply::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(words.len() > 3, "no speech recognized: {words:?}");
+
+    let peeks: Vec<_> = peeked
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| match r {
+            SttReply::PeekResult { peek_id, total_duration_s, words } => {
+                Some((i, *peek_id, *total_duration_s, words))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(peeks.len(), chunks.len() + 1);
+    let mut sent = 0;
+    for (n, (_, peek_id, total_duration_s, _)) in peeks.iter().enumerate() {
+        assert_eq!(*peek_id, n as u64);
+        assert!((total_duration_s - sent as f64 / SAMPLE_RATE as f64).abs() < 1e-9);
+        sent += chunks.get(n).map_or(0, |c| c.len());
+    }
+    // Before any audio, nothing is in flight.
+    assert!(peeks[0].3.is_empty(), "{:?}", peeks[0].3);
+    // The last peek covers all the audio, so it runs exactly what end_of_stream then runs on
+    // the live stream: the padded partial frame and the delay. Same words, same times.
+    let (at, _, _, last) = peeks.last().unwrap();
+    let flushed: Vec<PeekWord> = peeked[at + 1..]
+        .iter()
+        .filter_map(|r| match r {
+            SttReply::Text { text, start_s, .. } => {
+                Some(PeekWord { text: text.clone(), start_s: *start_s })
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(!flushed.is_empty(), "the audio should end mid-delay");
+    assert_eq!(**last, flushed);
+    for (_, peek_id, total_duration_s, words) in &peeks {
+        let words: Vec<_> = words.iter().map(|w| format!("{}@{:.2}", w.text, w.start_s)).collect();
+        eprintln!("peek {peek_id} at {total_duration_s:.3}s: {}", words.join(" "));
+    }
 }

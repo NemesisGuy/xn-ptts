@@ -37,6 +37,7 @@ Client to server:
 |---|---|---|
 | `setup` | `model_name` (ignored), `input_format`, `json_config` | First message. `input_format` must be `pcm`. `json_config` is a JSON object *as a string*; its `language` (`en`, `fr`, `de`, `es`, `pt`, or the checkpoint's other values) pins the spoken language, and without it the model picks. Other keys are ignored. |
 | `audio` | `audio` | Base64 of s16le mono PCM at 24 kHz, in chunks of any length. |
+| `peek` | `peek_id` (an unsigned 64-bit integer) | Ask for the words still in flight: answered with one `peek_result`. The stream carries on undisturbed. |
 | `end_of_stream` | | No more audio. |
 
 Server to client:
@@ -48,8 +49,15 @@ Server to client:
 | `text` | `text`, `start_s`, `stream_id` (0) | A recognized word (sometimes two short ones), sent once the model has closed it, which is `delay_in_frames` frames (0.8 s) after it was spoken. |
 | `end_text` | `stop_s`, `stream_id` (0) | When the previous word ended. |
 | `error` | `code`, `message` | 400 for a bad request, 408 for an idle session, 500 for an inference failure, 501 for an unsupported input format or no recognizer. Setup errors leave the session waiting for another `setup`. |
+| `peek_result` | `peek_id`, `total_duration_s`, `words` | Answer to `peek`, with its `peek_id`. `words` is a list of `{"text", "start_s"}`, the words the server has not sent as `text` yet but would if the audio ended at the peek; empty when none are pending. `total_duration_s` is the client audio the peek covers. |
 | `end_of_stream` | | After `end_of_stream` from the client: the last partial frame is padded with silence and gets its `step`, then the model's text delay is run out on silence so the last words arrive (as `text`/`end_text` only, no further `step`s), then this, and the server closes the connection. |
 
-The first two `step`s report `inactivity_prob` 1.0 for every horizon: the model's output is meaningless for its first four steps (its initial token, the two frames of silence it starts on, and the first frame of audio), and nobody has been heard speaking yet. Afterwards, the probability drops about 0.3 s after speech starts. A client that wants the last words without ending the session sends about a second of silence instead of `end_of_stream`.
+The first two `step`s report `inactivity_prob` 1.0 for every horizon: the model's output is meaningless for its first four steps (its initial token, the two frames of silence it starts on, and the first frame of audio), and nobody has been heard speaking yet. Afterwards, the probability drops about 0.3 s after speech starts.
+
+#### Peeking at the words in flight
+
+A word arrives as `text` `delay_in_frames` frames (0.8 s) after it was spoken, so when the speaker stops, their last words are still inside the model. `end_of_stream` gets them out by running that delay on silence, but ends the session; sending silence instead would feed the voice activity heads a pause that never happened. `peek` gets them without either: the server copies the stream's state (the Mimi encoder's and the language model's caches, the word in progress), runs the copy on the buffered partial frame padded with silence and then on `delay_in_frames + 1` frames of silence, exactly as `end_of_stream` would, answers with the words that come out, and drops the copy. The live stream is untouched: its `step`s and `text`s are the same, bit for bit, as without the peek. So a voice agent can start its reply speculatively a moment after the speaker pauses, with everything sent as `text` so far followed by the `peek_result`'s `words` as the full transcript, and keep listening.
+
+A `peek` is handled in order with the audio: its `peek_result` comes after the `step`s and `text`s of all the audio sent before it, and covers that audio including a partial frame not yet stepped; `total_duration_s` counts it. The copy's frames produce no `step`s. The words carry the same `text` and `start_s` as their `text` messages would; the end of the stream can still change how a word closes, typically its punctuation ("Hello," while more speech follows, "Hello." at a peek), and a word can appear in several peeks until it is sent as `text`. A peek costs the model 11 extra steps on the session's inference thread, about 0.2 s on an 8-core desktop CPU with `--asr-quant q8` (`RAYON_NUM_THREADS=8`), during which that session's next `step`s wait; a peek every half second keeps such a stream real time but delays its `step`s by up to that much. `peek` before `setup` is an error like `audio`, and peeks may be sent back to back: each is answered in turn.
 
 Inference runs on a blocking thread per session. Audio arriving faster than the model consumes it is held in a bounded queue, after which the server stops reading the socket, so a client streaming a file faster than real time is slowed to the model's speed rather than buffered without limit.

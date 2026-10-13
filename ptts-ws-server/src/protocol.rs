@@ -89,6 +89,11 @@ pub enum SttRequest {
         /// Base64 of the raw audio bytes.
         audio: String,
     },
+    /// The words still in flight for the audio sent so far, without disturbing the stream:
+    /// answered with [`SttReply::PeekResult`].
+    Peek {
+        peek_id: u64,
+    },
     EndOfStream,
 }
 
@@ -135,4 +140,18 @@ pub enum SttReply {
         message: String,
     },
     EndOfStream,
+    /// Answer to [`SttRequest::Peek`]: the words the stream has not sent yet but would if the
+    /// audio ended at the peek.
+    PeekResult {
+        peek_id: u64,
+        total_duration_s: f64,
+        words: Vec<PeekWord>,
+    },
+}
+
+/// One word of [`SttReply::PeekResult`], as a `text` message would carry it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PeekWord {
+    pub text: String,
+    pub start_s: f64,
 }
