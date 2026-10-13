@@ -117,6 +117,9 @@ pub struct FlowLMConfig {
     pub flow_dim: usize,
     pub flow_depth: usize,
     pub ldim: usize,
+    /// FFN activation, `tanh` (Pocket TTS) unless the checkpoint was trained with `erf`.
+    #[serde(default)]
+    pub gelu: crate::transformer::Gelu,
 }
 
 /// Transformer-based flow language model.
@@ -187,7 +190,7 @@ impl<Q: BackendQ> FlowLM<Q> {
             2,              // num_time_conds
         )?;
 
-        let transformer = StreamingTransformer::load(
+        let mut transformer = StreamingTransformer::load(
             &vb.pp("transformer"),
             cfg.d_model,
             cfg.num_heads,
@@ -198,6 +201,7 @@ impl<Q: BackendQ> FlowLM<Q> {
             cfg.max_period,
             crate::transformer::Kind::FlowLm,
         )?;
+        transformer.set_gelu(cfg.gelu);
 
         let emb_std = vb.tensor("emb_std", (cfg.ldim,))?;
         let emb_mean = vb.tensor("emb_mean", (cfg.ldim,))?;
