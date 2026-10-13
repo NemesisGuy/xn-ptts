@@ -135,12 +135,17 @@ jobs:
     name: Swift release package
     runs-on: macos-15
     timeout-minutes: 60
+    permissions:
+      contents: read
+      # A tag run downloads the framework from the main run that built it.
+      actions: read
     env:
       MACOSX_DEPLOYMENT_TARGET: '15.0'
       IPHONEOS_DEPLOYMENT_TARGET: '18.0'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           targets: aarch64-apple-ios aarch64-apple-ios-sim
           cache-key: swift-release
@@ -149,16 +154,31 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build the framework and wrapper
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
           ./ios/build-xcframework.sh
           swift build --package-path ios/PhononTTS
+      # The root Package.swift pins the framework by checksum, and two builds of one commit do
+      # not give the same archive. So a tag does not rebuild it: it takes the one a main run
+      # built from the same inputs, which `package-swift.py pin` wrote into Package.swift before
+      # tagging (docs/development.md, "Releasing the Swift package").
+      - name: Take the framework the root Package.swift pins
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python scripts/package-swift.py fetch --tag "$GITHUB_REF_NAME" --output pinned
       - name: Package the release
         shell: bash
         run: |
           set -euo pipefail
+          framework=ios/PhononTTS/PhononCore.xcframework.zip
           tag_args=()
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag_args=(--tag "$GITHUB_REF_NAME"); fi
-          python scripts/package-swift.py --framework ios/PhononTTS/PhononCore.xcframework.zip ${tag_args[@]+"${tag_args[@]}"}
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            framework=pinned/PhononCore.xcframework.zip
+            tag_args=(--tag "$GITHUB_REF_NAME")
+          fi
+          python scripts/package-swift.py package --framework "$framework" ${tag_args[@]+"${tag_args[@]}"}
           unzip -q dist/ptts-swift-*.zip -d unpacked
           package=$(find unpacked -name Package.swift -type f)
           swift package --package-path "$(dirname "$package")" dump-package
