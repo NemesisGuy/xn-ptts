@@ -20,11 +20,21 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 [![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
 [![Android QNN package](https://img.shields.io/badge/Android-QNN%20source%20preview-blue)](#android)
 
-[What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Packages and downloads](#packages-and-downloads) · [Quickstart](#quickstart) · [Guides](#guides)
+[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Packages and downloads](#packages-and-downloads) · [Quickstart](#quickstart) · [Guides](#guides)
 
 > **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
 
 The browser runs synthesis on your device; it downloads model files on first use.
+
+## Try it
+
+With [uv](https://docs.astral.sh/uv/) and a checkpoint folder, one line writes a WAV:
+
+```sh
+uvx ptts --model /path/to/model --lang en --quant q8 "Hello from Phonon." -o speech.wav
+```
+
+`--model` also takes a Hugging Face repo ID. Like the other unversioned commands here, this targets the upcoming stable release. To run the preview now, use `uvx --prerelease allow ptts` instead. See [Model setup](#model-setup) for the files a checkpoint needs.
 
 ## What you get
 
