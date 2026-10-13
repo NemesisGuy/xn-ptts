@@ -5,6 +5,7 @@
 use anyhow::{Context as _, Result};
 
 /// The built-in voices OpenAI's speech API names, which `--openai-voices` aliases all at once.
+/// Taken from the `voice` type of OpenAI's Python SDK in October 2026; update it when they add one.
 pub const OPENAI_VOICES: &[&str] = &[
     "alloy", "ash", "ballad", "cedar", "coral", "echo", "fable", "marin", "nova", "onyx", "sage",
     "shimmer", "verse",
@@ -13,7 +14,8 @@ pub const OPENAI_VOICES: &[&str] = &[
 /// The settings as given on the command line, before they are checked against the voices.
 #[derive(Debug, Default)]
 pub struct Compat {
-    /// `ALIAS=VOICE` entries. Empty entries are skipped.
+    /// `ALIAS=VOICE` entries. Spaces around an entry or its `=` are ignored, and empty entries
+    /// are skipped.
     pub voice_aliases: Vec<String>,
     /// The voice every one of [`OPENAI_VOICES`] stands for.
     pub openai_voices: Option<String>,
@@ -34,9 +36,10 @@ impl Aliases {
     /// already a voice is left to that voice.
     pub fn new(compat: &Compat, voices: &[String]) -> Result<Self> {
         let mut aliases = Self::default();
-        for entry in compat.voice_aliases.iter().filter(|e| !e.is_empty()) {
+        for entry in compat.voice_aliases.iter().map(|e| e.trim()).filter(|e| !e.is_empty()) {
             let (alias, target) = entry
                 .split_once('=')
+                .map(|(a, t)| (a.trim(), t.trim()))
                 .filter(|(a, t)| !a.is_empty() && !t.is_empty())
                 .with_context(|| format!("--voice-alias takes ALIAS=VOICE, not '{entry}'"))?;
             let target = resolve(target, voices)
@@ -120,6 +123,14 @@ mod tests {
         assert_eq!(got.get("nova"), None);
         assert_eq!(got.to_json(), serde_json::json!({ "alloy": "Freya", "Narrator": "default" }));
         assert_eq!(aliases(&[], None).unwrap(), Aliases::default());
+    }
+
+    #[test]
+    fn spaces_around_an_alias_are_ignored() {
+        // As in `PTTS_VOICE_ALIAS="alloy=Freya, nova = Toby"`.
+        let got = aliases(&["alloy=Freya", " nova = Toby ", " "], None).unwrap();
+        assert_eq!(got.get("nova"), Some(&Some("Toby".to_string())));
+        assert_eq!(got.to_json(), serde_json::json!({ "alloy": "Freya", "nova": "Toby" }));
     }
 
     #[test]

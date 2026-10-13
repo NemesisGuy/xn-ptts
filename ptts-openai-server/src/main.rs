@@ -200,7 +200,12 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
         &compat::Compat {
             voice_aliases: args.voice_aliases.clone(),
             // Compose files pass `PTTS_OPENAI_VOICES=` for none.
-            openai_voices: args.openai_voices.clone().filter(|v| !v.is_empty()),
+            openai_voices: args
+                .openai_voices
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string),
             ignore_speed: args.ignore_speed,
         },
     )
