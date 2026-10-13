@@ -4,6 +4,7 @@
 // generating never blocks the page; this file only posts requests to it and turns its
 // replies into promises and async iterators.
 
+import { resolveHubModel } from './hub.js';
 import { concatPcm, encodeWav } from './wav.js';
 
 export { clearCache } from './fetch.js';
@@ -87,26 +88,6 @@ export class PhononTTS {
     if (threads !== 'auto' && !(Number.isInteger(threads) && threads >= 1)) {
       throw new TypeError(`threads must be 'auto' or a positive integer, got ${JSON.stringify(threads)}`);
     }
-    // Required too. A default checkpoint would be one particular model's files, and loading
-    // a model other than the one the caller has in mind gives plausible speech with nothing
-    // to say it is the wrong model.
-    if (typeof model !== 'object' || model === null || Array.isArray(model)) {
-      throw new TypeError(
-        "model is required: where the checkpoint's files are, e.g. " +
-          "{ weights: { q8: '/model/model.q8.gguf' }, tokenizer: '/model/tokenizer.json', " +
-          "config: '/model/config.json', voices: { Freya: '/model/voices/Freya.safetensors' } }",
-      );
-    }
-    if (!isUrl(model.tokenizer)) {
-      throw new TypeError("model.tokenizer is required: the URL of the checkpoint's tokenizer.json");
-    }
-    if (!isUrl(model.config) || String(model.config).length === 0) {
-      throw new TypeError("model.config is required: the URL of the checkpoint's config.json");
-    }
-    // Checked before the worker starts, for the same reason as `rewrites` below.
-    if (!isUrl(model.weights?.[quant])) {
-      throw new TypeError(`model has no '${quant}' weights: set model.weights.${quant}, or pick another quant`);
-    }
     // Checked here rather than left to Rust: `load` is async and the error would otherwise
     // arrive after the weights had been downloaded. This mirrors `Rules`'s `FromStr`, which trims
     // and lowercases the whole string, takes `all`, `none` and `off` only on their own, and
@@ -137,7 +118,29 @@ export class PhononTTS {
       }
       return `${name}=${value}`;
     });
-    const defaultVoice = model.defaultVoice ?? Object.keys(model.voices ?? {})[0];
+    // Required too. A default checkpoint would be one particular model's files, and loading
+    // a model other than the one the caller has in mind gives plausible speech with nothing
+    // to say it is the wrong model. Checked last, so a bad option fails before a Hub request.
+    const spec = typeof model === 'string' ? await resolveHubModel(model, { cache }) : model;
+    if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) {
+      throw new TypeError(
+        "model is required: where the checkpoint's files are, e.g. " +
+          "{ weights: { q8: '/model/model.q8.gguf' }, tokenizer: '/model/tokenizer.json', " +
+          "config: '/model/config.json', voices: { Freya: '/model/voices/Freya.safetensors' } }, " +
+          "or a Hugging Face repo, 'hf://owner/name'",
+      );
+    }
+    if (!isUrl(spec.tokenizer)) {
+      throw new TypeError("model.tokenizer is required: the URL of the checkpoint's tokenizer.json");
+    }
+    if (!isUrl(spec.config) || String(spec.config).length === 0) {
+      throw new TypeError("model.config is required: the URL of the checkpoint's config.json");
+    }
+    // Checked before the worker starts, for the same reason as `rewrites` above.
+    if (!isUrl(spec.weights?.[quant])) {
+      throw new TypeError(`model has no '${quant}' weights: set model.weights.${quant}, or pick another quant`);
+    }
+    const defaultVoice = spec.defaultVoice ?? Object.keys(spec.voices ?? {})[0];
     const preload = voices ?? (defaultVoice ? [defaultVoice] : []);
 
     // `new URL(..., import.meta.url)` inline, not through a variable: it is the pattern Vite,
@@ -145,7 +148,7 @@ export class PhononTTS {
     const worker = workerUrl
       ? new Worker(workerUrl, { type: 'module' })
       : new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    const tts = new PhononTTS(worker, model, defaultVoice);
+    const tts = new PhononTTS(worker, spec, defaultVoice);
     try {
       const reply = await tts.#request(
         {
@@ -155,7 +158,7 @@ export class PhononTTS {
             rewrites,
             conditions: conditionList,
             quant,
-            model: resolveModel(model),
+            model: resolveModel(spec),
             preload,
             cache,
             wasmUrl: wasmUrl ? resolveUrl(wasmUrl) : undefined,

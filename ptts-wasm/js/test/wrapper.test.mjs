@@ -118,6 +118,34 @@ test('model is required, with weights for the quant being loaded', async () => {
   assert.equal(FakeWorker.last, null);
 });
 
+test('an hf:// model is resolved to URLs at its commit, after the other options are checked', async () => {
+  const sha = 'abc123';
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(url);
+    const files = ['config.json', 'tokenizer.json', 'model.q8.gguf', 'voices/anna.safetensors'];
+    return Response.json({ sha, siblings: files.map((rfilename) => ({ rfilename })) });
+  };
+  FakeWorker.last = null;
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: 'hf://acme/speech', rewrites: 'nope' }), /unknown rewrite/);
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: '/model/' }), /hf:\/\/owner\/name/);
+  assert.deepEqual(requests, []);
+  assert.equal(FakeWorker.last, null);
+
+  const tts = await PhononTTS.load({ lang: 'en', model: 'hf://acme/speech@v1', workerUrl: 'worker.js' });
+  const base = `https://huggingface.co/acme/speech/resolve/${sha}`;
+  assert.deepEqual(requests, ['https://huggingface.co/api/models/acme/speech/revision/v1']);
+  assert.deepEqual(FakeWorker.last.init.model, {
+    weights: { q8: `${base}/model.q8.gguf`, f32: `${base}/model.q8.gguf` },
+    tokenizer: `${base}/tokenizer.json`,
+    config: `${base}/config.json`,
+    voices: { anna: `${base}/voices/anna.safetensors` },
+  });
+  assert.deepEqual(FakeWorker.last.init.preload, ['anna']);
+  assert.deepEqual(tts.voices, ['anna']);
+  tts.dispose();
+});
+
 test('model files may be URL objects, as workerUrl and wasmUrl may', async () => {
   const model = {
     weights: { q8: new URL('https://example.com/m/model.q8.gguf') },
