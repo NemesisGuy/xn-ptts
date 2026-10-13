@@ -21,7 +21,7 @@ Or install the prebuilt CPU command with `cargo binstall ptts`. It uses the desk
 
 Without `--model` the command uses the default model. `--model /path/to/model` loads a local checkpoint, `--model hf://<owner>/<model>` another one from Hugging Face, and `--model hf://<owner>/<model>@<commit>` pins all its files to that revision. For private models, set `HF_TOKEN` or log in with the Hugging Face CLI. `ptts --help` lists all options.
 
-`--lang` is required: `en`, `fr`, `de`, `es`, `pt`, or `none` to disable normalization. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. `--quant q8` keeps q8 GGUF weights quantized on CPU; omit it for f32 weights. `--quantize-mimi` also runs most of the Mimi decoder in q8_0 on CPU, at a small cost in audio fidelity. It is off by default: it is faster with the `kai` feature or without `accelerate`, and slower with `accelerate` alone.
+`--lang` is required: `en`, `fr`, `de`, `es`, `pt`, or `none` to disable normalization. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. `--quant q8` keeps q8 GGUF weights quantized on CPU; omit it for f32 weights.
 
 The Python package also installs a command named `ptts`, with the same `--model`. When both are installed, `PATH` order selects the command. Use `python -m ptts` with your Python environment's interpreter to invoke Python explicitly.
 
