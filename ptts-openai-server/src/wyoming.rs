@@ -107,6 +107,8 @@ impl<S> Server<S> {
         };
         match self.voices.iter().find(|v| v.eq_ignore_ascii_case(name)) {
             Some(voice) => Ok(Some(voice.clone())),
+            // `default` means the default voice, as on the HTTP API.
+            None if name.eq_ignore_ascii_case("default") => Ok(None),
             None => {
                 Err(format!("unknown voice '{name}'; this server has {}", self.voices.join(", ")))
             }
@@ -169,18 +171,20 @@ where
             // Inside a stream, Home Assistant also sends the whole text this way, for servers
             // that predate streaming. It is spoken already.
             "synthesize" if stream.is_some() => {}
-            "synthesize" => match voice {
-                Ok(voice) => {
-                    let mut started = false;
-                    speak(&server, &mut write, text, voice, false, &mut started).await?;
-                    // A client waits for `audio-stop`, so it is sent even with no audio before it.
-                    if !started {
-                        send(&mut write, &audio_start(server.sample_rate)).await?;
+            "synthesize" => {
+                let mut started = false;
+                match voice {
+                    Ok(voice) => {
+                        speak(&server, &mut write, text, voice, false, &mut started).await?
                     }
-                    send(&mut write, &encode("audio-stop", &json!({}), &[])).await?;
+                    Err(message) => send(&mut write, &error(&message)).await?,
                 }
-                Err(message) => send(&mut write, &error(&message)).await?,
-            },
+                // A client may wait for `audio-stop`, so it ends every request, failed or not.
+                if !started {
+                    send(&mut write, &audio_start(server.sample_rate)).await?;
+                }
+                send(&mut write, &encode("audio-stop", &json!({}), &[])).await?;
+            }
             "synthesize-start" => {
                 if let Err(message) = &voice {
                     send(&mut write, &error(message)).await?;
@@ -438,7 +442,7 @@ mod tests {
         let words = Arc::new(Words::default());
         let server = Arc::new(Server {
             speaker: words.clone(),
-            voices: vec!["alba".into(), "default".into()],
+            voices: vec!["alba".into(), "marius".into()],
             info: encode("info", &json!({ "tts": [] }), &[]),
             requests: Arc::new(Semaphore::new(1)),
             seed_base: 0,
@@ -474,6 +478,8 @@ mod tests {
             ),
             event("synthesize", json!({ "text": "Hi.", "voice": { "name": "nobody" } })),
             event("synthesize", json!({ "text": " " })),
+            // `default` is the default voice, though no voice has that name.
+            event("synthesize", json!({ "text": "Good morning.", "voice": { "name": "default" } })),
         ])
         .await;
         let expected = [
@@ -484,12 +490,22 @@ mod tests {
             "audio-chunk",
             "audio-stop",
             "error",
+            "audio-start",
+            "audio-stop",
             "error",
             "audio-start",
             "audio-stop",
+            "audio-start",
+            "audio-chunk",
+            "audio-chunk",
+            "audio-stop",
         ];
         assert_eq!(received, expected);
-        assert_eq!(spoken, [("Hello there everyone.".to_string(), Some("alba".to_string()))]);
+        let expected = [
+            ("Hello there everyone.".to_string(), Some("alba".to_string())),
+            ("Good morning.".to_string(), None),
+        ];
+        assert_eq!(spoken, expected);
     }
 
     #[tokio::test]

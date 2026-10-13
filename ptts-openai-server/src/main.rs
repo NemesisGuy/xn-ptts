@@ -119,7 +119,9 @@ async fn main() -> Result<()> {
 
     if let Some(addr) = &args.wyoming_addr {
         let server = std::sync::Arc::new(wyoming::Server::new(&app_state)?);
-        let listener = tokio::net::TcpListener::bind(addr).await?;
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .with_context(|| format!("cannot listen for Wyoming on {addr}"))?;
         tracing::info!(%addr, "listening for Wyoming");
         tokio::spawn(wyoming::serve(listener, server));
     }
