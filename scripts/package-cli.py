@@ -36,6 +36,7 @@ def main():
     if reported != f"ptts {version}":
         parser.error(f"binary reports {reported!r}, expected 'ptts {version}'")
     args.output.mkdir(parents=True, exist_ok=True)
+    # `[package.metadata.binstall]` in ptts/Cargo.toml relies on this name and folder layout.
     name = f"ptts-{version}-{args.target}"
     windows = "windows" in args.target
     archive = args.output / f"{name}{'.zip' if windows else '.tar.gz'}"

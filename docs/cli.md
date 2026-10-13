@@ -31,7 +31,7 @@ shasum -a 256 ptts-<version>-<target>.tar.gz
 
 On Windows, compare `Get-FileHash .\ptts-<version>-x86_64-pc-windows-msvc.zip -Algorithm SHA256` with its entry in `SHA256SUMS`.
 
-With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), `cargo binstall ptts` installs the archive for your platform. It does not check `SHA256SUMS`. On a platform not listed above, it builds from source instead, which needs `--features cli`.
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), `cargo binstall ptts` installs the archive for your platform. The requirements above still apply, since binstall cannot check them. It does not check `SHA256SUMS`. Where no archive exists for your target, `cargo binstall ptts --locked --features cli` builds from source instead; without `--features cli` that build finds no command to install.
 
 ## Homebrew
 

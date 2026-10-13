@@ -57,7 +57,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 # `cargo binstall ptts` fetches the command from the desktop archives that
 # `.github/workflows/cli-release.yml` attaches to each release (see `scripts/package-cli.py`).
-# A target without an archive falls back to a source build, which needs `--features cli`.
+# A target without an archive falls back to `cargo install`, which installs the command only
+# when binstall is given `--features cli`.
 # Quick-install is off: its prebuilt binaries use default features, which have no command.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }{ archive-suffix }"
