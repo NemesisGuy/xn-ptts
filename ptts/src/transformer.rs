@@ -348,6 +348,24 @@ pub enum Kind {
     FlowLm,
 }
 
+/// FFN activation. Pocket TTS runs its transformers with PyTorch's `gelu(approximate="tanh")`;
+/// `erf` is the exact GELU, for checkpoints trained with it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Gelu {
+    #[default]
+    Tanh,
+    Erf,
+}
+
+/// The tanh GELU, `0.5 x (1 + tanh(u))` with `u = sqrt(2 / pi) (x + 0.044715 x^3)`, computed as
+/// `x sigmoid(2u)`: the same function, and faster on CPU than xn's `tanh` or its `gelu_erf`.
+fn gelu_tanh<T: WithDTypeF, B: Backend>(x: &Tensor<T, B>) -> Result<Tensor<T, B>> {
+    let u2 =
+        x.sqr()?.scale_add(T::from_f32(0.071_354_82), T::from_f32(1.595_769))?.broadcast_mul(x)?;
+    u2.sigmoid()?.broadcast_mul(x)
+}
+
 pub struct StreamingTransformerLayer<Q: BackendQ> {
     self_attn: AttentionKind<Q>,
     norm1: LayerNorm<Q::T, Q::B>,
@@ -356,6 +374,7 @@ pub struct StreamingTransformerLayer<Q: BackendQ> {
     linear2: Q::LinearQ,
     layer_scale_1: Option<LayerScale<Q::T, Q::B>>,
     layer_scale_2: Option<LayerScale<Q::T, Q::B>>,
+    pub gelu: Gelu,
 }
 
 impl<Q: BackendQ> StreamingTransformerLayer<Q> {
@@ -398,7 +417,16 @@ impl<Q: BackendQ> StreamingTransformerLayer<Q> {
             None
         };
 
-        Ok(Self { self_attn, norm1, norm2, linear1, linear2, layer_scale_1, layer_scale_2 })
+        Ok(Self {
+            self_attn,
+            norm1,
+            norm2,
+            linear1,
+            linear2,
+            layer_scale_1,
+            layer_scale_2,
+            gelu: Gelu::default(),
+        })
     }
 
     pub fn init_state(
@@ -444,7 +472,10 @@ impl<Q: BackendQ> StreamingTransformerLayer<Q> {
         // FF block: x + layer_scale_2(ff(norm2(x)))
         let norm2 = self.norm2.forward(&x)?;
         let mut ff_out = self.linear1.forward(&norm2)?;
-        ff_out = ff_out.gelu_erf()?;
+        ff_out = match self.gelu {
+            Gelu::Tanh => gelu_tanh(&ff_out)?,
+            Gelu::Erf => ff_out.gelu_erf()?,
+        };
         ff_out = self.linear2.forward(&ff_out)?;
         if let Some(ls) = &self.layer_scale_2 {
             ff_out = ls.forward(&ff_out)?;
@@ -462,6 +493,10 @@ pub struct StreamingTransformer<Q: BackendQ> {
 }
 
 impl<Q: BackendQ> StreamingTransformer<Q> {
+    pub fn set_gelu(&mut self, gelu: Gelu) {
+        self.layers.iter_mut().for_each(|l| l.gelu = gelu);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn load(
         vb: &Path<Q::B>,
