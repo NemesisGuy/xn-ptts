@@ -40,7 +40,8 @@ export function parseHubModel(source) {
  * revision points at, so a cached download is never served after the repo changes.
  *
  * With `cache`, the Hub's answer is kept beside the downloads, and used when the Hub cannot be
- * reached, so a model whose files are cached still loads offline.
+ * reached or fails (a 5xx or 429), so a model whose files are cached still loads offline. A
+ * branch then means the commit it pointed at when it was last looked up.
  *
  * @param {string} source `hf://owner/name` or `hf://owner/name@revision`
  * @param {{ cache?: boolean }} [options]
@@ -59,10 +60,17 @@ export async function resolveHubModel(source, { cache = true } = {}) {
       throw new Error(`cannot reach the Hugging Face Hub to look up ${source}: ${e.message}`);
     }
   }
+  if (response.status >= 500 || response.status === 429) {
+    response = (await store?.match(api).catch(() => undefined)) ?? response;
+  }
   if (response.status === 404 && response.headers.get('x-error-code') === 'RevisionNotFound') {
     throw new Error(`${repo} has no revision '${revision}'`);
   }
-  const info = response.ok ? await response.json() : null;
+  const info = response.ok
+    ? await response.json().catch(() => {
+        throw new Error(`cannot look up ${source}: the Hub's answer is not JSON`);
+      })
+    : null;
   if ([401, 403, 404].includes(response.status) || info?.gated) {
     throw new Error(
       `cannot load ${source}: the repo is missing, private or gated, and the browser can only ` +

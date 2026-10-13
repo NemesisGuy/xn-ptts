@@ -159,9 +159,21 @@ test('offline, the last answer from the Hub is used, so cached files still load'
       throw new TypeError('Failed to fetch');
     };
     assert.deepEqual(await resolveHubModel('hf://acme/speech'), online);
+    for (const status of [503, 429]) {
+      globalThis.fetch = async () => new Response('', { status });
+      assert.deepEqual(await resolveHubModel('hf://acme/speech'), online, `HTTP ${status}`);
+    }
+    globalThis.fetch = async () => {
+      throw new TypeError('Failed to fetch');
+    };
     await assert.rejects(resolveHubModel('hf://acme/speech', { cache: false }), /cannot reach/);
     await assert.rejects(resolveHubModel('hf://acme/other'), /cannot reach/);
   } finally {
     delete globalThis.caches;
   }
+});
+
+test('an answer that is not JSON names what was being looked up', async () => {
+  globalThis.fetch = async () => new Response('<html>sign in to the network</html>', { status: 200 });
+  await assert.rejects(resolveHubModel('hf://acme/speech'), /hf:\/\/acme\/speech: the Hub's answer is not JSON/);
 });
