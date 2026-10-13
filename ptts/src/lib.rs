@@ -82,6 +82,8 @@ pub mod checkpoint;
 pub mod comp;
 mod conditioners;
 mod conv;
+#[cfg(feature = "asr")]
+mod deep_copy;
 mod dummy_quantizer;
 pub mod error;
 pub mod flow_lm;

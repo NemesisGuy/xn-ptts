@@ -66,6 +66,17 @@ pub struct MimiEncoderState<T: WithDTypeF, B: Backend> {
     downsample_state: Option<StreamingConv1dState<T, B>>,
 }
 
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for MimiEncoderState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self {
+            encoder_state: self.encoder_state.deep_copy()?,
+            encoder_transformer_state: self.encoder_transformer_state.deep_copy()?,
+            downsample_state: self.downsample_state.deep_copy()?,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MimiDecoderState<T: WithDTypeF, B: Backend> {
     decoder_state: SEANetDecoderState<T, B>,

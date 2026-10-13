@@ -84,6 +84,13 @@ pub struct StreamingConv1dState<T: WithDTypeF, B: Backend> {
     pub first: bool,
 }
 
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for StreamingConv1dState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self { previous: self.previous.copy()?, first: self.first })
+    }
+}
+
 /// Streaming Conv1d with causal padding.
 pub struct StreamingConv1d<T: WithDTypeF, B: Backend> {
     pub conv: Conv1d<T, B>,

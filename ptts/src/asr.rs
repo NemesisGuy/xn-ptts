@@ -36,6 +36,7 @@ mod vad;
 
 pub use lm::{ConditionerConfig, Config, LutConfig, ModelId};
 
+use crate::deep_copy::DeepCopy;
 use crate::mimi::{MimiConfig, MimiEncoder, MimiEncoderState};
 use crate::synth::{DeviceKind, Quant};
 use crate::{Error, Result};
@@ -210,6 +211,20 @@ struct AsrState<Q: BackendQ> {
     steps: usize,
 }
 
+impl<Q: BackendQ> AsrState<Q> {
+    /// A copy that shares no tensor storage with `self`; see [`crate::deep_copy`].
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self {
+            enc: self.enc.deep_copy()?,
+            lm: self.lm.deep_copy()?,
+            decoder: self.decoder.clone(),
+            condition: self.condition.deep_copy()?,
+            text_token: self.text_token,
+            steps: self.steps,
+        })
+    }
+}
+
 impl<Q: BackendQ> AsrModel<Q> {
     fn load(mimi_vb: &Path<Q::B>, lm_vb: &Path<Q::B>, cfg: Config) -> Result<Self> {
         let mimi_cfg = mimi_config();
@@ -345,6 +360,7 @@ trait AsrApi: Send + Sync {
 
 trait StreamApi: Send {
     fn step(&mut self, pcm: &[f32]) -> Result<Step>;
+    fn fork(&self) -> Result<Box<dyn StreamApi>>;
 }
 
 struct AsrOf<Q: BackendQ> {
@@ -410,6 +426,14 @@ where
         }
         self.model.step(&mut self.state, pcm, self.temperature)
     }
+
+    fn fork(&self) -> Result<Box<dyn StreamApi>> {
+        Ok(Box::new(StreamOf {
+            model: self.model.clone(),
+            state: self.state.deep_copy()?,
+            temperature: self.temperature,
+        }))
+    }
 }
 
 /// A loaded speech recognizer, shared by any number of [`AsrStream`]s.
@@ -445,7 +469,8 @@ impl Asr {
     }
 
     /// How many frames the text lags the audio. Feed that many frames of silence after the
-    /// last audio to get its words out.
+    /// last audio to get its words out, or feed them to an [`AsrStream::fork`] to see those
+    /// words without ending the stream.
     pub fn delay_frames(&self) -> usize {
         self.0.delay_frames()
     }
@@ -471,6 +496,17 @@ impl AsrStream {
     /// Consume one frame of exactly [`FRAME_SIZE`] samples of 24 kHz mono audio.
     pub fn step(&mut self, pcm: &[f32]) -> Result<Step> {
         self.0.step(pcm)
+    }
+
+    /// An independent copy of the stream as it stands: the Mimi encoder's and the LM's caches,
+    /// the word in progress and the step count. Stepping either one leaves the other exactly
+    /// as it was, so a caller can run the text delay out on silence on a fork to see the words
+    /// still in flight, and then drop it, without the live stream hearing that silence.
+    ///
+    /// Copies every cache (about 57 MB for `asr-67f06783.100`), which takes a few
+    /// milliseconds; the model weights are shared.
+    pub fn fork(&self) -> Result<AsrStream> {
+        Ok(AsrStream(self.0.fork()?))
     }
 }
 
@@ -578,6 +614,86 @@ mod tests {
                 Event::EndOfStream,
             ]
         );
+    }
+
+    /// The samples of a 16-bit PCM WAV file's first channel, as f32.
+    fn read_wav_s16(path: &std::path::Path) -> Vec<f32> {
+        let bytes = std::fs::read(path).unwrap();
+        assert_eq!(&bytes[..4], b"RIFF", "{} is not a WAV file", path.display());
+        let (mut pos, mut channels) = (12, 1);
+        while pos + 8 <= bytes.len() {
+            let id = &bytes[pos..pos + 4];
+            let len = u32::from_le_bytes(bytes[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            let body = &bytes[pos + 8..(pos + 8 + len).min(bytes.len())];
+            match id {
+                b"fmt " => {
+                    assert_eq!(u16::from_le_bytes([body[0], body[1]]), 1, "not PCM");
+                    channels = u16::from_le_bytes([body[2], body[3]]) as usize;
+                    let rate = u32::from_le_bytes(body[4..8].try_into().unwrap());
+                    assert_eq!(rate as usize, SAMPLE_RATE, "resample to 24 kHz first");
+                    assert_eq!(u16::from_le_bytes([body[14], body[15]]), 16, "not 16-bit");
+                }
+                b"data" => {
+                    return body
+                        .chunks_exact(2 * channels)
+                        .map(|s| i16::from_le_bytes([s[0], s[1]]) as f32 / 32768.0)
+                        .collect();
+                }
+                _ => {}
+            }
+            pos += 8 + len + (len & 1);
+        }
+        panic!("{} has no data chunk", path.display())
+    }
+
+    /// Run with `cargo test --release -p ptts --features asr -- --ignored fork`.
+    #[test]
+    #[ignore = "requires PTTS_TEST_ASR_MODEL (a speech-recognition checkpoint folder) and \
+                PTTS_TEST_ASR_AUDIO (24 kHz mono 16-bit WAV of speech)"]
+    fn a_forked_stream_runs_independently_of_its_original() {
+        let dir = std::path::PathBuf::from(std::env::var("PTTS_TEST_ASR_MODEL").unwrap());
+        let audio = std::env::var("PTTS_TEST_ASR_AUDIO").unwrap();
+        let asr = Asr::builder(
+            read_config(dir.join("config.json")).unwrap(),
+            dir.join("model.safetensors"),
+            dir.join("mimi.safetensors"),
+        )
+        .quant(Quant::Q80)
+        .build()
+        .unwrap();
+        let mut pcm = read_wav_s16(std::path::Path::new(&audio));
+        pcm.resize(pcm.len().div_ceil(FRAME_SIZE) * FRAME_SIZE, 0.0);
+        let frames: Vec<&[f32]> = pcm.chunks(FRAME_SIZE).collect();
+        let silence = vec![0f32; FRAME_SIZE];
+
+        let mut reference = asr.stream(Some("en")).unwrap();
+        let expected: Vec<Step> = frames.iter().map(|f| reference.step(f).unwrap()).collect();
+        let words = expected.iter().flat_map(|s| &s.events);
+        assert!(words.filter(|e| matches!(e, Event::Word { .. })).count() > 3, "no speech?");
+
+        // Fork every few frames and run the fork on silence: the original must not notice.
+        // One fork instead gets the rest of the real audio, and must step exactly as the
+        // original did, which it can only if the copy left no state behind.
+        let mut live = asr.stream(Some("en")).unwrap();
+        let mut forks_with_words = 0;
+        for (i, frame) in frames.iter().enumerate() {
+            if i % 5 == 2 {
+                let mut fork = live.fork().unwrap();
+                let mut events = vec![];
+                for _ in 0..=asr.delay_frames() {
+                    events.extend(fork.step(&silence).unwrap().events);
+                }
+                forks_with_words += events.iter().any(|e| matches!(e, Event::Word { .. })) as usize;
+            }
+            if i == frames.len() / 2 {
+                let mut fork = live.fork().unwrap();
+                for (j, frame) in frames.iter().enumerate().skip(i) {
+                    assert_eq!(fork.step(frame).unwrap(), expected[j], "fork, frame {j}");
+                }
+            }
+            assert_eq!(live.step(frame).unwrap(), expected[i], "live, frame {i}");
+        }
+        assert!(forks_with_words > 0, "the forks never flushed a word out");
     }
 
     #[test]

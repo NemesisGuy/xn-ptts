@@ -7,6 +7,7 @@
 //! machinery.
 
 use super::vad::VadReadout;
+use crate::deep_copy::DeepCopy;
 use crate::rope::RotaryEmbedding;
 use crate::transformer::KvCache;
 use std::collections::HashMap;
@@ -321,6 +322,12 @@ impl<T: WithDTypeF, B: Backend> LutConditioner<T, B> {
 pub(crate) struct LmState<T: WithDTypeF, B: Backend> {
     caches: Vec<KvCache<T, B>>,
     offset: usize,
+}
+
+impl<T: WithDTypeF, B: Backend> DeepCopy for LmState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self { caches: self.caches.deep_copy()?, offset: self.offset })
+    }
 }
 
 /// What one LM step produces.

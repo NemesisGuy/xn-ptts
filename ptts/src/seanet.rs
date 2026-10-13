@@ -16,6 +16,13 @@ pub struct SEANetResnetBlockState<T: WithDTypeF, B: Backend> {
     conv_states: Vec<StreamingConv1dState<T, B>>,
 }
 
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for SEANetResnetBlockState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self { conv_states: self.conv_states.deep_copy()? })
+    }
+}
+
 impl<T: WithDTypeF, B: Backend> SEANetResnetBlock<T, B> {
     pub fn load(
         vb: &Path<B>,
@@ -212,6 +219,17 @@ impl<T: WithDTypeF, B: Backend> SEANetEncoder<T, B> {
         }
         x = x.elu(1.0)?;
         self.final_conv.forward(&x, &mut state.final_conv_state)
+    }
+}
+
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for SEANetEncoderState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self {
+            init_conv_state: self.init_conv_state.deep_copy()?,
+            layer_states: self.layer_states.deep_copy()?,
+            final_conv_state: self.final_conv_state.deep_copy()?,
+        })
     }
 }
 

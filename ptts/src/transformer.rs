@@ -208,6 +208,46 @@ impl<T: WithDTypeF, B: Backend> KvCache<T, B> {
     }
 }
 
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for KvCache<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self {
+            k: self.k.deep_copy()?,
+            v: self.v.deep_copy()?,
+            context: self.context,
+            absolute_offset: self.absolute_offset,
+        })
+    }
+}
+
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for StreamingMHAState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self {
+            k_cache: self.k_cache.copy()?,
+            v_cache: self.v_cache.copy()?,
+            current_end: self.current_end,
+        })
+    }
+}
+
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for LayerAttentionState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(match self {
+            Self::Mimi(kv) => Self::Mimi(kv.deep_copy()?),
+            Self::FlowLm(mha) => Self::FlowLm(mha.deep_copy()?),
+        })
+    }
+}
+
+#[cfg(feature = "asr")]
+impl<T: WithDTypeF, B: Backend> crate::deep_copy::DeepCopy for StreamingTransformerState<T, B> {
+    fn deep_copy(&self) -> Result<Self> {
+        Ok(Self { layer_states: self.layer_states.deep_copy()? })
+    }
+}
+
 // ---- State types ----
 
 #[derive(Clone, Debug)]
