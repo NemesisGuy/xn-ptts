@@ -20,7 +20,7 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 [![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
 [![Android QNN package](https://img.shields.io/badge/Android-QNN%20source%20preview-blue)](#android)
 
-[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Packages and downloads](#packages-and-downloads) · [Quickstart](#quickstart) · [Guides](#guides)
+[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
 
 > **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
 
@@ -50,34 +50,21 @@ The first run downloads the default model and caches it. Like the other unversio
 
 ## Choose an integration
 
-| You want to… | Start here | What you need |
-|---|---|---|
-| Generate a speech file | [Command line](#command-line) | A desktop binary. No Python or Rust required for a published binary. |
-| Add speech to a script or backend | [Python](#python) | A Python wheel. |
-| Run speech in a web app | [Browser](#browser) | `phonon-tts`. |
-| Add speech to an iPhone or Mac app | [Swift](#swift) | The `ptts` Swift package and a prepared Core ML bundle. |
-| Add speech to an Android app | [Android](#android) | A Kotlin AAR preview for supported Snapdragon NPUs, or the CPU native library. Source build and model files required. |
-| Give Home Assistant's voice assistant a local voice | [Home Assistant](ptts-openai-server/README.md#home-assistant) | Home Assistant. No custom integration. |
-| Connect an existing app or self-host | [Docker and OpenAI-compatible API](#docker-and-openai-compatible-api) | Docker. |
-| Embed the runtime in Rust | [Rust](#rust) | The `ptts` crate. |
+Each goal links to its quickstart below. Packages are available as a runtime preview; see the note at the top.
+
+| You want to… | Package | Get it | Details |
+|---|---|---|---|
+| [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
+| [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
+| [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | `ptts-swift-<version>.zip` and its matching compiled framework. Needs a prepared Core ML bundle. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
+| | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
+| [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
+| [Connect an existing app or self-host](#docker-and-openai-compatible-api) | `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; it downloads the default model on first start, or mounts your own. [Server guide](ptts-openai-server/README.md). |
+| [Embed the runtime in Rust](#rust) | Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
 Phonon is the product and model identity. The Rust, Python, Swift, and planned Android Maven packages are named **`ptts`**; the browser npm package is **`phonon-tts`**. This repository remains `xn-ptts`. Swift apps use `import PhononTTS`.
-
-## Packages and downloads
-
-Packages and native downloads are available as a runtime preview. Follow the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) to install the preview. The unversioned commands below are the installation paths for the upcoming stable release.
-
-| Package | Get it | Details |
-|---|---|---|
-| Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. [Download guide and Homebrew](docs/cli.md). |
-| Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
-| Browser `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| Swift `ptts` | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | `ptts-swift-<version>.zip` and its matching compiled framework. [Swift guide](ios/PhononTTS/README.md). |
-| Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
-| Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
-| `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; it downloads the default model on first start, or mounts your own. [Server guide](ptts-openai-server/README.md). |
-| Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. [Setup](ptts-openai-server/README.md#home-assistant). |
-| Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
 Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs may need a source build: x86 wheels and desktop downloads target x86-64-v3. See the platform requirements in the [CLI guide](docs/cli.md) and [Python guide](ptts-pyo3/README.md).
 
