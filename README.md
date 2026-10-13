@@ -84,16 +84,6 @@ model/
 
 Voice files may instead live in `voices/` or `embeddings/`. Use the files and voice names your checkpoint supplies; do not substitute another model's tokenizer or config. The command line, Python and the servers load f32 weights unless given `--quant q8` or `quant="q8"`, which runs faster on the CPU; the browser loads q8 unless given `quant: 'f32'`.
 
-**Already received a model from us?** Extract it locally and use the matching integration below. You do not need a public Hugging Face repo or an HF token for local files. Runtime packages contain no model weights.
-
-| Files you received | Use them with |
-|---|---|
-| A checkpoint with `config.json`, `tokenizer.json`, weights and voices | Command line, Python, Rust, browser, servers or Android CPU. Use a runtime version compatible with your checkpoint. |
-| A prepared Core ML bundle | Swift. Add it to your app as `Models`, or host it for the Swift download API. A raw checkpoint needs [exporting first](ios/PhononTTS/README.md#1-build-the-two-pieces-that-are-not-in-the-source). |
-| A QNN bundle with `metadata.json` and compiled context binaries | Android NPU. It must match the phone's SoC and the package's QNN runtime. Older bundles may need their target metadata updated; see the [preview guide](qnn/android/README.md). A raw checkpoint needs exporting and compiling first. |
-
-`lang` is required and selects **text normalization**, such as how numbers and symbols are spoken. Choose `en`, `fr`, `de`, `es`, `pt`, or `none` to pass text through unchanged. This setting does not establish which languages a checkpoint can speak.
-
 ## Quickstart
 
 These examples use the default model. The install commands below target the upcoming stable release; to install the runtime preview now, follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) or the [source setup](docs/development.md).
