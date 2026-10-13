@@ -36,7 +36,7 @@ The first run downloads the default model and caches it. To run the runtime prev
 
 ## What you get
 
-- **Small enough to ship:** Choose a 40M or 90M parameter model. Both can ship inside a mobile app or load in a browser tab.
+- **Small enough to ship:** Choose a 31M, 56M or 98M parameter model. Each can ship inside a mobile app or load in a browser tab.
 - **Five languages in one model:** Speak English, French, German, Spanish, and Portuguese, with more languages planned.
 - **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
 - **Voices ready to use or make your own:** Choose from ready-to-use voices, or explore voice design and cloning in [Gradium Studio](https://studio.gradium.ai/).
@@ -44,7 +44,24 @@ The first run downloads the default model and caches it. To run the runtime prev
 
 ## Performance
 
-<!-- Performance measurements and methodology will go here. -->
+Three model sizes, one inference stack. Each cell is how many seconds of audio Phonon makes per
+second of compute (higher is faster; above 1x is faster than real time) and the time to first
+byte (TTFB). CPU rows use a single core; the Metal and Neural Engine rows run on the accelerator.
+
+| Device | 31M | 56M | 98M |
+|---|---|---|---|
+| MacBook Air M5, CPU, 1 core | 26x · 5 ms | 22x · 6 ms | 17x · 11 ms |
+| MacBook Air M5, Metal GPU | 29x · 4 ms | 25x · 5 ms | 20x · 10 ms |
+| iPhone 16 Pro, Neural Engine | 22x · 9 ms | 19x · 13 ms | 15x · 17 ms |
+| Raspberry Pi 5, CPU, 1 core | 2.3x · 68 ms | 2.2x · 92 ms | 1.8x · 191 ms |
+
+- Every size runs faster than real time on a single CPU core, from a MacBook to a Raspberry Pi 5.
+- TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
+  for the whole sentence.
+- On one MacBook Air core, the 56M model runs at 22x real time with a 6 ms TTFB. Kokoro (82M), run
+  through its own PyTorch package on the same core, runs at 7.3x with a 776 ms TTFB. Kokoro does not
+  stream: it makes the whole sentence before returning any audio, so its TTFB is the time for the
+  full sentence. Streaming frame by frame is what keeps Phonon's TTFB in milliseconds.
 
 ## Choose an integration
 
