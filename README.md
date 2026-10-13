@@ -58,8 +58,10 @@ byte (TTFB). CPU rows use a single core; the Metal and Neural Engine rows run on
 - Every size runs faster than real time on a single CPU core, from a MacBook to a Raspberry Pi 5.
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
-- On one MacBook Air core, the 56M model runs at 22× real time with a 6 ms TTFB. Kokoro's own
-  PyTorch runtime on the same core runs at 7.3× with a 776 ms TTFB.
+- On one MacBook Air core, the 56M model runs at 22× real time with a 6 ms TTFB. Kokoro (82M), run
+  through its own PyTorch package on the same core, runs at 7.3× with a 776 ms TTFB. Kokoro does not
+  stream: it makes the whole sentence before returning any audio, so its TTFB is the time for the
+  full sentence. Streaming frame by frame is what keeps Phonon's TTFB in milliseconds.
 
 ## Choose an integration
 
