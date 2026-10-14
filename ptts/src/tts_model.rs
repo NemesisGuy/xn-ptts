@@ -59,6 +59,12 @@ pub struct TTSConfig {
     pub audio_prompt_max_duration: f32,
     #[serde(default)]
     pub cfg_null_audio_empty: bool,
+    /// If true, the CFG null branch gets no text at all. That is what a dropped transcript gives
+    /// in training with the fuser's packed prefix (`pad_prepend` false): its masked positions are
+    /// removed, so nothing of it reaches the model. If false, the null text is the text
+    /// conditioner's learnt padding row, which preserves the historical behavior.
+    #[serde(default)]
+    pub cfg_null_text_empty: bool,
     #[serde(default)]
     pub speaker_mimi: Option<SpeakerMimiConfig>,
     #[serde(default)]
@@ -102,6 +108,7 @@ pub struct TTSModel<Q: BackendQ> {
     speaker_proj: Option<Linear<f32, Q::B>>,
     lsd_decode_steps: usize,
     eos_threshold: f32,
+    cfg_null_text_empty: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -126,6 +133,7 @@ impl<Q: BackendQ> TTSModel<Q> {
             speaker_proj,
             lsd_decode_steps: cfg.lsd_decode_steps,
             eos_threshold: cfg.eos_threshold,
+            cfg_null_text_empty: cfg.cfg_null_text_empty,
         })
     }
 
@@ -162,7 +170,12 @@ impl<Q: BackendQ> TTSModel<Q> {
         Ok(())
     }
 
+    /// The CFG null branch's text: nothing with `cfg_null_text_empty`, as training's packed
+    /// prefix gives for a dropped transcript, else the text conditioner's learnt padding row.
     pub fn prompt_text_null(&self, state: &mut TTSState<Q>) -> Result<()> {
+        if self.cfg_null_text_empty {
+            return Ok(());
+        }
         let empty_text = match self.flow_lm.conditioner.learnt_padding() {
             None => xn::bail!("Model does not support null text prompt"),
             Some(p) => p,
@@ -484,6 +497,7 @@ mod tests {
             "audio_prompt_min_duration",
             "audio_prompt_max_duration",
             "cfg_null_audio_empty",
+            "cfg_null_text_empty",
             "speaker_mimi",
             "conditioners",
             "fuser",
@@ -494,6 +508,7 @@ mod tests {
         assert_eq!(old.audio_prompt_min_duration, default_audio_prompt_min_duration());
         assert_eq!(old.audio_prompt_max_duration, default_audio_prompt_max_duration());
         assert!(!old.cfg_null_audio_empty);
+        assert!(!old.cfg_null_text_empty);
         assert!(old.speaker_mimi.is_none());
         assert!(old.conditioners.is_empty() && old.fuser.is_none());
     }
