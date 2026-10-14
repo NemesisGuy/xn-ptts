@@ -238,8 +238,9 @@ impl<T: WithDTypeF, B: Backend> LUTConditioner<T, B> {
     /// Get embeddings for token ids. Returns [1, num_tokens, dim].
     pub fn embed_tokens(&self, token_ids: &[u32]) -> Result<Tensor<T, B>> {
         if token_ids.is_empty() {
+            // Rows come out projected, `output_dim` wide, whatever the table's own width.
             let dev = self.embed.device();
-            return Tensor::zeros((1, 0, self.dim), dev);
+            return Tensor::zeros((1, 0, self.output_dim), dev);
         }
         // `index_select` does not bounds-check, so an id past the table panics instead of
         // erroring. The usual cause is a tokenizer from another checkpoint. The learnt padding,
@@ -309,6 +310,16 @@ mod tests {
         assert!(
             matches!(&cfgs[1], ConditionerConfig::Continuous { continuous, .. } if continuous.dim == 128)
         );
+    }
+
+    #[test]
+    fn no_tokens_give_an_empty_prefix_at_the_projected_width() {
+        // A low-rank table: rows stored 2 wide, projected to 5 (the embed here already holds
+        // projected rows, as `load` leaves them).
+        let mut c = conditioner(3, 5);
+        c.dim = 2;
+        assert_eq!(c.embed_tokens(&[]).unwrap().dims(), &[1, 0, 5]);
+        assert_eq!(c.embed_tokens(&[1]).unwrap().dims(), &[1, 1, 5]);
     }
 
     #[test]

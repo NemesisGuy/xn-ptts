@@ -402,7 +402,9 @@ impl<Q: BackendQ> TTSModel<Q> {
 
     /// The empty text prefix a step with no new tokens is conditioned on.
     fn empty_text(&self) -> Result<Tensor<Q::T, Q::B>> {
-        Tensor::zeros((1, 0, self.flow_lm.conditioner.dim), self.device())
+        // `output_dim`, the model width the prefix is concatenated at: a low-rank text table
+        // (`lut_dim` < `d_model`) is narrower before its output projection.
+        Tensor::zeros((1, 0, self.flow_lm.conditioner.output_dim), self.device())
     }
 }
 
