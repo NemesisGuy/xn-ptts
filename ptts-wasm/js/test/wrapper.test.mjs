@@ -390,3 +390,20 @@ test('cancel also discards audio still buffered after generation completed', asy
   assert.equal((await speech[Symbol.asyncIterator]().next()).done, true);
   tts.dispose();
 });
+
+test('a file the worker hands back is cached by the page, not taken for a reply', async () => {
+  const stored = new Map();
+  globalThis.caches = {
+    async open() {
+      return { put: async (url, res) => void stored.set(url, new Uint8Array(await res.arrayBuffer())) };
+    },
+  };
+  try {
+    await load();
+    FakeWorker.last.onmessage({ data: { type: 'store', url: 'https://x/w', bytes: new Uint8Array([4, 5]).buffer } });
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(stored.get('https://x/w'), new Uint8Array([4, 5]));
+  } finally {
+    delete globalThis.caches;
+  }
+});

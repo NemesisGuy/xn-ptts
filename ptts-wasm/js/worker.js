@@ -137,11 +137,12 @@ async function handleInit(id, options) {
   if (!weightsUrl) throw new Error(`this model has no '${quant}' weights`);
   const progress = (file) => (p) => post({ type: 'progress', id, file, ...p });
 
-  const [weights, tokenizer, config] = await Promise.all([
-    fetchBytes(weightsUrl, { cache, onProgress: progress('weights') }),
-    fetchBytes(spec.tokenizer, { cache, onProgress: progress('tokenizer') }),
-    fetchBytes(spec.config, { cache, onProgress: progress('config') }),
+  const files = await Promise.all([
+    download(weightsUrl, progress('weights')),
+    download(spec.tokenizer, progress('tokenizer')),
+    download(spec.config, progress('config')),
   ]);
+  const [weights, tokenizer, config] = files.map((f) => f.bytes);
   const load = (device) =>
     wasm.Model.load(
       weights,
@@ -170,6 +171,8 @@ async function handleInit(id, options) {
   }
   model ??= await load('cpu');
   frameSize = model.frame_size();
+  // The model holds its own copy now: the page can have these to cache.
+  for (const file of files) file.keep();
 
   for (const name of options.preload) await voiceIndex(name, progress(`voice:${name}`));
   return {
@@ -183,6 +186,31 @@ async function handleInit(id, options) {
   };
 }
 
+/**
+ * Downloads `url`, or reads it from the cache, without writing the cache: `keep()` then hands a
+ * download to the page, which caches it (see `storeBytes` in fetch.js for why the worker does
+ * not). Call it only once the bytes are no longer needed here: they are transferred, not
+ * copied, so they are gone from this side afterwards. wasm copies what it is given, so that is
+ * as soon as the model or the voice has been loaded from them.
+ */
+async function download(url, onProgress) {
+  let cached = false;
+  const bytes = await fetchBytes(url, {
+    cache: settings.cache,
+    write: false,
+    onProgress: (p) => {
+      cached = p.cached;
+      onProgress?.(p);
+    },
+  });
+  const keep = () => {
+    if (!settings.cache || cached) return;
+    const buffer = bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer;
+    post({ type: 'store', url, bytes: buffer }, [buffer]);
+  };
+  return { bytes, keep };
+}
+
 /** The index of voice `name`, fetching and registering it on first use. */
 function voiceIndex(name, onProgress) {
   let entry = voices.get(name);
@@ -192,8 +220,12 @@ function voiceIndex(name, onProgress) {
       const known = [...new Set([...Object.keys(settings.model.voices), ...voices.keys()])];
       return Promise.reject(new Error(`unknown voice '${name}'; known: ${known.join(', ')}`));
     }
-    entry = fetchBytes(url, { cache: settings.cache, onProgress })
-      .then((bytes) => registerVoice(bytes))
+    entry = download(url, onProgress)
+      .then(async ({ bytes, keep }) => {
+        const index = await registerVoice(bytes);
+        keep();
+        return index;
+      })
       .catch((e) => {
         voices.delete(name); // let a later call retry
         throw e;
@@ -204,11 +236,13 @@ function voiceIndex(name, onProgress) {
 }
 
 async function handleAddVoice(name, source) {
-  const bytes = typeof source === 'string' ? await fetchBytes(source, { cache: settings.cache }) : new Uint8Array(source);
+  const { bytes, keep } =
+    typeof source === 'string' ? await download(source) : { bytes: new Uint8Array(source), keep() {} };
   const index = registerVoice(bytes);
   voices.set(name, index);
   try {
     await index;
+    keep();
   } catch (e) {
     voices.delete(name); // let a later call retry
     throw e;
