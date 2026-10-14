@@ -6,6 +6,7 @@
 
 import { DEFAULT_MODEL, resolveHubModel } from './hub.js';
 import { concatPcm, encodeWav } from './wav.js';
+import { storeBytes } from './fetch.js';
 
 export { clearCache } from './fetch.js';
 export { DEFAULT_MODEL } from './hub.js';
@@ -189,7 +190,11 @@ export class PhononTTS {
     this.#worker = worker;
     this.#voices = new Set(Object.keys(model.voices ?? {}));
     this.#defaultVoice = defaultVoice;
-    worker.onmessage = ({ data }) => this.#pending.get(data.id)?.[data.type]?.(data);
+    worker.onmessage = ({ data }) => {
+      // A file the worker downloaded, for the page to cache: see `storeBytes` for why.
+      if (data.type === 'store') return void storeBytes(data.url, data.bytes);
+      this.#pending.get(data.id)?.[data.type]?.(data);
+    };
     worker.onerror = (e) => {
       e.preventDefault?.();
       // A dead worker never replies: fail what is pending and refuse what comes next, rather
