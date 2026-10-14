@@ -190,6 +190,19 @@ After the character pass, each word goes through the rewrite rules (`ptts/src/pr
 
 Quantization story: only `flow_lm.transformer.layers.*.{linear1,linear2,self_attn.in_proj,self_attn.out_proj}.weight` get GGML-quantized (see `examples/quantize.rs`); Mimi stays in `Unquantized<f32>`. The Mimi quantizer codebook tensors (`mimi.quantizer.*` except `output_proj`) are excluded from output GGUFs since the runtime uses `dummy_quantizer.rs`.
 
+CFG null branch, for checkpoints trained with the fuser's packed prefix (`pad_prepend` false):
+`cfg_null_text_empty` gives it no text, as a dropped transcript gives in training, instead of
+the text conditioner's learnt padding row (the default, kept for older exports).
+
+Prefix sinks: `prefix_sinks` in `config.json` names the prepended conditionings (`speaker_wavs`,
+`transcript_in_segment`) trained with audium's `sink: true`, each optionally with
+`dropped_token` (`sink_dropped_token`). Their `[1, 1, d_model]` tensors keep audium's names,
+`flow_lm.condition_provider.conditioners.<name>.sink` / `.sink_dropped` (the transcript's load
+as `flow_lm.conditioner.*` after `remap_key`). `TTSModel::prompt_audio` and `prompt_text` put the
+sink in front of the frames, or the dropped token for an absent or empty conditioning, and the
+CFG null branch and a voice-less state get the dropped tokens alone. A checkpoint with sinks
+must set `cfg_null_audio_empty: true`.
+
 ## Conventions to be aware of
 
 - `target-cpu=native` is on by default for host builds and `apple-m1` on the macOS CI release lane; do not assume binaries are portable.
