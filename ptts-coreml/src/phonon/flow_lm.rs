@@ -202,15 +202,24 @@ fn layer(
     Ok(b.add(&x, &h, &[1, t, dm.d]))
 }
 
+/// The norm closing each time embedder, as the checkpoint was trained with
+/// (`ptts::flow_lm::TimeRmsNorm`, `flow_lm.time_rms_norm` in its config).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TimeNorm {
+    /// `h * a / sqrt(mean(h^2) + eps)`, uncentred, as audiocraft computes it.
+    Rms,
+    /// `h * a / sqrt(var(h) + eps)`, the variance centred and unbiased, as pocket-tts computes
+    /// it. The mean is still not subtracted from `h`.
+    #[default]
+    RmsVar,
+}
+
 /// `TimestepEmbedder` at a fixed time, in f32 on the host: the step always goes from s = 0 to
 /// t = 1, so the embedding is a constant of the checkpoint and the graph only needs its value.
-///
-/// It ends in the checkpoint's "RMS" norm, which is not an RMS norm: it divides by the variance
-/// about the mean, but does not subtract the mean. Computing `mean(h^2)` instead, as this graph
-/// once did, only agrees when the mean is near zero -- true enough for one checkpoint to look
-/// exact and wrong for another. This follows `xn`'s `layer_norm` with `remove_mean(false)` and
-/// `unbiased(true)`, which is what ptts runs.
-fn time_embed(wt: &Weights, idx: usize, t: f32) -> Result<Vec<f32>, String> {
+/// It ends in `norm`, which has to be the one the checkpoint was trained with: the two only
+/// agree when the mean is near zero, true enough for one checkpoint to look exact and wrong for
+/// another.
+fn time_embed(wt: &Weights, idx: usize, t: f32, norm: TimeNorm) -> Result<Vec<f32>, String> {
     let p = format!("flow_lm.flow_net.time_embed.{idx}");
     let freqs = wt.data(&format!("{p}.freqs"))?;
     let mut x: Vec<f32> = freqs.iter().map(|f| (t * f).cos()).collect();
@@ -228,11 +237,16 @@ fn time_embed(wt: &Weights, idx: usize, t: f32) -> Result<Vec<f32>, String> {
     let h: Vec<f32> = linear(&x, "mlp.0")?.iter().map(|v| v / (1.0 + (-v).exp())).collect();
     let h = linear(&h, "mlp.2")?;
     let n = h.len() as f32;
-    let mean = h.iter().sum::<f32>() / n;
-    let var = h.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / n;
-    let (inv, unbias) = (1.0 / (var + 1e-5).sqrt(), ((n - 1.0) / n).sqrt());
+    let ms = match norm {
+        TimeNorm::Rms => h.iter().map(|v| v * v).sum::<f32>() / n,
+        TimeNorm::RmsVar => {
+            let mean = h.iter().sum::<f32>() / n;
+            h.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / (n - 1.0)
+        }
+    };
+    let inv = 1.0 / (ms + 1e-5).sqrt();
     let alpha = wt.data(&format!("{p}.mlp.3.alpha"))?;
-    Ok(h.iter().zip(alpha).map(|(v, a)| v * inv * a * unbias).collect())
+    Ok(h.iter().zip(alpha).map(|(v, a)| v * inv * a).collect())
 }
 
 fn modulate(b: &mut Builder, x: &Var, shift: &Var, scale: &Var, n: usize) -> Var {
@@ -248,13 +262,14 @@ fn flow_net(
     wt: &Weights,
     cond: &Var,
     noise: &Var,
+    time_norm: TimeNorm,
 ) -> Result<Var, String> {
     let p = "flow_lm.flow_net";
     let iw = w(b, wt, &format!("{p}.input_proj.weight"))?;
     let ib = w(b, wt, &format!("{p}.input_proj.bias"))?;
     let mut x = b.linear(noise, &iw, Some(&ib), &[1, dm.flow_d]);
     // The two time conditions averaged, as `SimpleMLPAdaLN::forward` does.
-    let (t0, t1) = (time_embed(wt, 0, 0.0)?, time_embed(wt, 1, 1.0)?);
+    let (t0, t1) = (time_embed(wt, 0, 0.0, time_norm)?, time_embed(wt, 1, 1.0, time_norm)?);
     let ts: Vec<f32> = t0.iter().zip(&t1).map(|(a, b)| (a + b) * 0.5).collect();
     let ts = b.const_f32(&ts, &[1, dm.flow_d]);
     let cw = w(b, wt, &format!("{p}.cond_embed.weight"))?;
@@ -309,7 +324,14 @@ fn flow_net(
 /// same graph serves prefill and decode), `cos`/`sin [1, 1, t, HD/2]`, `mask [1, 1, t, ctx + t]`,
 /// `noise [1, LDIM]`, and the ring `k_all_in`/`v_all_in [L, H, ctx, HD]`. Outputs: `next_latent`
 /// and `eos` for the last position, and `k_new`/`v_new [L, H, t, HD]` for the host to store.
-pub fn build(wt: &Weights, dm: &Dims, ctx: usize, t: usize) -> Result<Built, String> {
+/// `time_norm` is the checkpoint's time-embedding norm, baked into the graph as a constant.
+pub fn build(
+    wt: &Weights,
+    dm: &Dims,
+    ctx: usize,
+    t: usize,
+    time_norm: TimeNorm,
+) -> Result<Built, String> {
     let mut b = Builder::new().with_float(FP);
     let emb = b.input("emb", FP, &[1, t, dm.d]);
     let cos = b.input("cos", FP, &[1, 1, t, dm.hd() / 2]);
@@ -334,7 +356,7 @@ pub fn build(wt: &Weights, dm: &Dims, ctx: usize, t: usize) -> Result<Built, Str
     let ew = w(&mut b, wt, "flow_lm.out_eos.weight")?;
     let eb = w(&mut b, wt, "flow_lm.out_eos.bias")?;
     let eos = b.linear(&t_out, &ew, Some(&eb), &[1, 1]);
-    let dir = flow_net(dm, &mut b, wt, &t_out, &noise)?;
+    let dir = flow_net(dm, &mut b, wt, &t_out, &noise, time_norm)?;
     let next = b.add(&noise, &dir, &[1, dm.ldim]);
     let next = b.alias(&next, "next_latent");
     let eos = b.alias(&eos, "eos");
@@ -346,4 +368,41 @@ pub fn build(wt: &Weights, dm: &Dims, ctx: usize, t: usize) -> Result<Built, Str
     let k_new = b.alias(&k, "k_new");
     let v_new = b.alias(&v, "v_new");
     Ok(b.finish_with_weights(&[&next, &eos, &k_new, &v_new]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn both_time_norms_follow_their_formulas() {
+        // Zero weights leave `mlp.2`'s bias as the row reaching the norm: one with a clear mean,
+        // where centring matters, and alpha = 2.
+        let xs = [1.0f32, 2.0, 3.0, 6.0];
+        let p = "flow_lm.flow_net.time_embed.0";
+        let t = |name: &str, shape: &[usize], data: Vec<f32>| {
+            (format!("{p}.{name}"), (shape.to_vec(), data))
+        };
+        let wt = Weights::from_tensors(
+            [
+                t("freqs", &[1], vec![0.0]),
+                t("mlp.0.weight", &[4, 2], vec![0.0; 8]),
+                t("mlp.0.bias", &[4], vec![0.0; 4]),
+                t("mlp.2.weight", &[4, 4], vec![0.0; 16]),
+                t("mlp.2.bias", &[4], xs.to_vec()),
+                t("mlp.3.alpha", &[4], vec![2.0; 4]),
+            ]
+            .into(),
+        );
+        let (n, eps) = (4.0f32, 1e-5f32);
+        let mean = xs.iter().sum::<f32>() / n;
+        let var = xs.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / (n - 1.0);
+        let ms = xs.iter().map(|v| v * v).sum::<f32>() / n;
+        for (norm, den) in [(TimeNorm::Rms, ms), (TimeNorm::RmsVar, var)] {
+            let got = time_embed(&wt, 0, 1.0, norm).unwrap();
+            for (g, v) in got.iter().zip(xs) {
+                assert!((g - 2.0 * v / (den + eps).sqrt()).abs() < 1e-5, "{norm:?}: {got:?}");
+            }
+        }
+    }
 }

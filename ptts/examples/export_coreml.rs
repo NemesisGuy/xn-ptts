@@ -87,6 +87,10 @@ fn main() -> Result<()> {
         "the Core ML graph takes one flow step; this checkpoint wants {}",
         cfg.lsd_decode_steps
     );
+    let time_norm = match f.time_rms_norm {
+        ptts::flow_lm::TimeRmsNorm::Rms => fl::TimeNorm::Rms,
+        ptts::flow_lm::TimeRmsNorm::RmsVar => fl::TimeNorm::RmsVar,
+    };
     let m = &cfg.mimi;
     anyhow::ensure!(
         (m.transformer_d_model, m.transformer_num_heads) == (mimi::DIM, mimi::HEADS),
@@ -191,8 +195,12 @@ fn main() -> Result<()> {
     let ctx = vlen + args.max_tokens + max_frames + 16;
     tracing::info!(?dims, vlen, max_frames, ctx, "building graphs");
     let bad = |e: String| anyhow::anyhow!(e);
-    write(&args.out, &fl::package_name(ctx, 1), fl::build(&wt, &dims, ctx, 1).map_err(bad)?)?;
-    let prefill = fl::build(&wt, &dims, ctx, args.max_tokens).map_err(bad)?;
+    write(
+        &args.out,
+        &fl::package_name(ctx, 1),
+        fl::build(&wt, &dims, ctx, 1, time_norm).map_err(bad)?,
+    )?;
+    let prefill = fl::build(&wt, &dims, ctx, args.max_tokens, time_norm).map_err(bad)?;
     write(&args.out, &fl::package_name(ctx, args.max_tokens), prefill)?;
     write(
         &args.out,
