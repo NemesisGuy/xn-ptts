@@ -121,9 +121,8 @@ pub struct FlowLMConfig {
     /// FFN activation, `tanh` (Pocket TTS) unless the checkpoint was trained with `erf`.
     #[serde(default)]
     pub gelu: crate::transformer::Gelu,
-    /// The flow net's time-embedding RMS norm, see [`TimeRmsNorm`]: `rms` for audiocraft
-    /// (audium) checkpoints, `var` for pocket-tts ones; `legacy`, the default, is what this
-    /// crate computed before the choice existed.
+    /// The flow net's time-embedding RMS norm, see [`TimeRmsNorm`]: `rms_var` (the default) for
+    /// pocket-tts checkpoints, `rms` for audiocraft (audium, phonon) ones.
     #[serde(default)]
     pub time_rms_norm: TimeRmsNorm,
 }

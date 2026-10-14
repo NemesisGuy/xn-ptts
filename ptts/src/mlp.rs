@@ -14,26 +14,21 @@ fn modulate<T: WithDTypeF, B: Backend>(
 
 /// The RMS norm closing each time embedder, which has to match the training code.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum TimeRmsNorm {
-    /// `x * a / sqrt(var(x) + eps * n / (n - 1))`, the variance centred: what this crate has
-    /// always computed, kept as the default so existing exports load unchanged. It is
-    /// pocket-tts's `var` with `eps` scaled by `n / (n - 1)` (xn's layer norm with
-    /// `remove_mean(false)` still centres the variance), and centred unlike `rms`.
-    #[default]
-    Legacy,
     /// `x * a / sqrt(mean(x^2) + eps)`, uncentred, as audiocraft (audium, every phonon model)
-    /// computes it.
+    /// computes it. Phonon exports set it in their config.
     Rms,
-    /// `x * a / sqrt(var(x) + eps)` with `var` centred and unbiased, as pocket-tts computes it
-    /// (`torch.var`).
-    Var,
+    /// `x * a / sqrt(var(x) + eps)`, the variance centred and unbiased, as pocket-tts computes it
+    /// (`torch.var`). The default, so pocket-tts checkpoints load unchanged. Before the choice
+    /// existed this crate computed this with `eps` scaled by `n / (n - 1)`, for every checkpoint.
+    #[default]
+    RmsVar,
 }
 
 pub struct TimestepEmbedder<T: WithDTypeF, B: Backend> {
     linear1: Linear<T, B>,
     linear2: Linear<T, B>,
-    rms_norm: LayerNorm<T, B>,
     alpha: Tensor<T, B>,
     norm: TimeRmsNorm,
     freqs: Tensor<T, B>,
@@ -50,14 +45,9 @@ impl<T: WithDTypeF, B: Backend> TimestepEmbedder<T, B> {
         let linear1 = Linear::load_b(mlp.pp("0"), frequency_embedding_size, hidden_size)?;
         let linear2 = Linear::load_b(mlp.pp("2"), hidden_size, hidden_size)?;
 
-        let ln_w = mlp.tensor("3.alpha", (hidden_size,))?;
-        let ln_b = ln_w.zeros_like()?;
-        let alpha = ln_w.clone();
-        // The python implementation of rms-norm uses an unbiased variance estimator while the one
-        // in xn uses a biased one. We adjust it by this factor.
-        let rms_norm = LayerNorm::new(ln_w, ln_b, 1e-5)?.remove_mean(false).unbiased(true);
+        let alpha = mlp.tensor("3.alpha", (hidden_size,))?;
         let freqs = vb.tensor("freqs", (frequency_embedding_size / 2,))?;
-        Ok(Self { linear1, linear2, rms_norm, alpha, norm, freqs })
+        Ok(Self { linear1, linear2, alpha, norm, freqs })
     }
 
     #[tracing::instrument(name = "ts-embedder", skip_all)]
@@ -78,12 +68,11 @@ impl<T: WithDTypeF, B: Backend> TimestepEmbedder<T, B> {
         let last = x.rank() - 1;
         let n = x.dims()[last] as f32;
         match self.norm {
-            TimeRmsNorm::Legacy => self.rms_norm.forward(x),
             TimeRmsNorm::Rms => {
                 let ms = x.sqr()?.sum_keepdim(vec![last])?.scale(T::from_f32(1.0 / n))?;
                 x.broadcast_mul(&ms.add_scalar(eps)?.rsqrt()?)?.broadcast_mul(&self.alpha)
             }
-            TimeRmsNorm::Var => {
+            TimeRmsNorm::RmsVar => {
                 let mean = x.sum_keepdim(vec![last])?.scale(T::from_f32(1.0 / n))?;
                 let var = x.broadcast_sub(&mean)?.sqr()?.sum_keepdim(vec![last])?;
                 let inv = var.scale(T::from_f32(1.0 / (n - 1.0)))?.add_scalar(eps)?.rsqrt()?;
@@ -241,20 +230,15 @@ mod tests {
     use xn::CpuDevice;
 
     #[test]
-    fn the_three_time_norms_follow_their_formulas() {
+    fn both_time_norms_follow_their_formulas() {
         // A row with a clear mean, where centring matters, and alpha = 2.
         let xs = [1.0f32, 2.0, 3.0, 6.0];
         let x = Tensor::from_vec(xs.to_vec(), (1, 4), &CpuDevice).unwrap();
         let alpha = Tensor::from_vec(vec![2.0f32; 4], 4, &CpuDevice).unwrap();
         let run = |norm| {
-            let rms_norm = LayerNorm::new(alpha.clone(), alpha.zeros_like().unwrap(), 1e-5)
-                .unwrap()
-                .remove_mean(false)
-                .unbiased(true);
             let e = TimestepEmbedder::<f32, CpuDevice> {
                 linear1: Linear::new(Tensor::zeros((1, 1), &CpuDevice).unwrap()),
                 linear2: Linear::new(Tensor::zeros((1, 1), &CpuDevice).unwrap()),
-                rms_norm,
                 alpha: alpha.clone(),
                 norm,
                 freqs: Tensor::zeros(1, &CpuDevice).unwrap(),
@@ -271,17 +255,16 @@ mod tests {
             }
         };
         close(run(TimeRmsNorm::Rms), xs.iter().map(|v| 2.0 * v / (ms + eps).sqrt()).collect());
-        close(run(TimeRmsNorm::Var), xs.iter().map(|v| 2.0 * v / (var + eps).sqrt()).collect());
-        let legacy_eps = eps * n / (n - 1.0);
-        close(
-            run(TimeRmsNorm::Legacy),
-            xs.iter().map(|v| 2.0 * v / (var + legacy_eps).sqrt()).collect(),
-        );
+        close(run(TimeRmsNorm::RmsVar), xs.iter().map(|v| 2.0 * v / (var + eps).sqrt()).collect());
     }
 
     #[test]
-    fn the_config_spells_the_time_norm_in_lowercase() {
+    fn the_config_names_the_time_norms_and_defaults_to_rms_var() {
         assert_eq!(serde_json::from_str::<TimeRmsNorm>("\"rms\"").unwrap(), TimeRmsNorm::Rms);
-        assert_eq!(TimeRmsNorm::default(), TimeRmsNorm::Legacy);
+        assert_eq!(
+            serde_json::from_str::<TimeRmsNorm>("\"rms_var\"").unwrap(),
+            TimeRmsNorm::RmsVar
+        );
+        assert_eq!(TimeRmsNorm::default(), TimeRmsNorm::RmsVar);
     }
 }
