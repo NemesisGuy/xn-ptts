@@ -22,7 +22,7 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 
 [Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
 
-> **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
+> **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.2) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
 
 ## Try it
 
@@ -124,7 +124,7 @@ To use a voice by name in Python and the servers too, save it in the checkpoint 
 
 ## Quickstart
 
-These examples use the default model. The install commands below target the upcoming stable release; to install the runtime preview now, follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.1) or the [source setup](docs/development.md).
+These examples use the default model. The install commands below target the upcoming stable release; to install the runtime preview now, follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.2) or the [source setup](docs/development.md).
 
 ### Command line
 
@@ -139,7 +139,7 @@ uvx ptts --lang en "Hello from Phonon." -o speech.wav
 
 `uvx` manages the Python environment and dependencies.
 
-On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew tap. It currently installs the `0.4.0-rc.1` runtime preview:
+On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew tap. It currently installs the `0.4.0-rc.2` runtime preview:
 
 ```sh
 brew install gradium-ai/tap/ptts
