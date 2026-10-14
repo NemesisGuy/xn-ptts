@@ -7,6 +7,7 @@
 // Re-exported because `FlowLM::conditioner` is public and frontends tokenize through it.
 pub use crate::conditioners::LUTConditioner;
 use crate::mlp::SimpleMLPAdaLN;
+pub use crate::mlp::TimeRmsNorm;
 use crate::transformer::{StreamingTransformer, StreamingTransformerState};
 use crate::tts_model::TTSConfig;
 use std::collections::HashMap;
@@ -120,6 +121,11 @@ pub struct FlowLMConfig {
     /// FFN activation, `tanh` (Pocket TTS) unless the checkpoint was trained with `erf`.
     #[serde(default)]
     pub gelu: crate::transformer::Gelu,
+    /// The flow net's time-embedding RMS norm, see [`TimeRmsNorm`]: `rms` for audiocraft
+    /// (audium) checkpoints, `var` for pocket-tts ones; `legacy`, the default, is what this
+    /// crate computed before the choice existed.
+    #[serde(default)]
+    pub time_rms_norm: TimeRmsNorm,
 }
 
 /// Transformer-based flow language model.
@@ -188,6 +194,7 @@ impl<Q: BackendQ> FlowLM<Q> {
             cfg.d_model,    // cond_channels
             cfg.flow_depth, // num_res_blocks
             2,              // num_time_conds
+            cfg.time_rms_norm,
         )?;
 
         let mut transformer = StreamingTransformer::load(
