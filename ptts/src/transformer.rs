@@ -59,22 +59,51 @@ impl<T: WithDTypeF, B: Backend> StreamingMHAState<T, B> {
     }
 }
 
+/// The attention's width and key/value heads, when they differ from the model's: `dim` for all
+/// the query heads (`dim / num_heads` each), `kv_heads` key/value heads, each shared by
+/// `num_heads / kv_heads` consecutive query heads (grouped-query attention, audiocraft's
+/// `kv_repeat` with `expand_repeated_kv`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttnShape {
+    pub dim: usize,
+    pub kv_heads: usize,
+}
+
 /// Streaming multi-head attention (used by the flow LM transformer).
 pub struct StreamingMultiheadAttention<Q: BackendQ> {
     in_proj: Q::LinearQ,
     out_proj: Q::LinearQ,
     pub embed_dim: usize,
     pub num_heads: usize,
+    /// Width of all query heads together, `embed_dim` unless the checkpoint narrows it.
+    pub attn_dim: usize,
+    /// Key/value heads, `num_heads` unless grouped.
+    pub kv_heads: usize,
     device: Q::B,
 }
 
 impl<Q: BackendQ> StreamingMultiheadAttention<Q> {
-    pub fn load(vb: &Path<Q::B>, embed_dim: usize, num_heads: usize) -> Result<Self> {
-        let out_dim = 3 * embed_dim;
+    pub fn load(
+        vb: &Path<Q::B>,
+        embed_dim: usize,
+        num_heads: usize,
+        attn: AttnShape,
+    ) -> Result<Self> {
+        let head_dim = attn.dim / num_heads;
+        // Rows: the queries (`attn.dim`), then the keys, then the values (`kv_dim` each).
+        let out_dim = attn.dim + 2 * head_dim * attn.kv_heads;
         let in_proj = Q::linear_load(vb.pp("in_proj"), embed_dim, out_dim)?;
-        let out_proj = Q::linear_load(vb.pp("out_proj"), embed_dim, embed_dim)?;
+        let out_proj = Q::linear_load(vb.pp("out_proj"), attn.dim, embed_dim)?;
         let device = vb.device().clone();
-        Ok(Self { in_proj, out_proj, embed_dim, num_heads, device })
+        Ok(Self {
+            in_proj,
+            out_proj,
+            embed_dim,
+            num_heads,
+            attn_dim: attn.dim,
+            kv_heads: attn.kv_heads,
+            device,
+        })
     }
 
     pub fn init_state(
@@ -82,8 +111,9 @@ impl<Q: BackendQ> StreamingMultiheadAttention<Q> {
         batch_size: usize,
         sequence_length: usize,
     ) -> Result<StreamingMHAState<Q::T, Q::B>> {
-        let dim_per_head = self.embed_dim / self.num_heads;
-        let shape = (batch_size, sequence_length, self.num_heads, dim_per_head);
+        // Only the key/value heads are stored; they are repeated for the query heads at use.
+        let dim_per_head = self.attn_dim / self.num_heads;
+        let shape = (batch_size, sequence_length, self.kv_heads, dim_per_head);
         let dev = &self.device;
         let k_cache = Tensor::zeros(shape, dev)?;
         let v_cache = Tensor::zeros(shape, dev)?;
@@ -100,23 +130,29 @@ impl<Q: BackendQ> StreamingMultiheadAttention<Q> {
     ) -> Result<Tensor<Q::T, Q::B>> {
         use xn::ModuleT;
         let (b, t, _) = query.dims3()?;
-        let d = self.embed_dim / self.num_heads;
+        let d = self.attn_dim / self.num_heads;
         let projected = self.in_proj.forward(query)?;
         // Split into q, k, v by narrowing on the last dimension
-        let ed = self.embed_dim;
-        let q = projected.narrow(2, 0..ed)?.contiguous()?.reshape((b, t, self.num_heads, d))?;
+        let (qd, kvd) = (self.attn_dim, d * self.kv_heads);
+        let q = projected.narrow(2, 0..qd)?.contiguous()?.reshape((b, t, self.num_heads, d))?;
         let k =
-            projected.narrow(2, ed..2 * ed)?.contiguous()?.reshape((b, t, self.num_heads, d))?;
-        let v = projected.narrow(2, 2 * ed..3 * ed)?.contiguous()?.reshape((
+            projected.narrow(2, qd..qd + kvd)?.contiguous()?.reshape((b, t, self.kv_heads, d))?;
+        let v = projected.narrow(2, qd + kvd..qd + 2 * kvd)?.contiguous()?.reshape((
             b,
             t,
-            self.num_heads,
+            self.kv_heads,
             d,
         ))?;
 
-        // Apply RoPE: q, k are [b, t, h, d]
+        // Apply RoPE: q is [b, t, h, d], k is [b, t, kv_heads, d]
         let (q, k) = rope.forward(&q, &k)?;
         let (k, v) = state.complete_kv(&k, &v)?;
+        let (k, v) = if self.kv_heads == self.num_heads {
+            (k, v)
+        } else {
+            let rep = self.num_heads / self.kv_heads;
+            (repeat_kv(&k, rep)?, repeat_kv(&v, rep)?)
+        };
 
         let inv_sqrt_d = 1.0 / (d as f32).sqrt();
 
@@ -139,10 +175,23 @@ impl<Q: BackendQ> StreamingMultiheadAttention<Q> {
             let x = attn.matmul(&v)?;
 
             // Back to [b, t, h*d]
-            x.transpose(1, 2)?.reshape((b, t, self.embed_dim))?.contiguous()?
+            x.transpose(1, 2)?.reshape((b, t, self.attn_dim))?.contiguous()?
         };
         self.out_proj.forward(&x)
     }
+}
+
+/// `[b, s, kv, d]` keys or values to `[b, s, kv * rep, d]`, each head repeated `rep` times in a
+/// row, so query head `i` reads key/value head `i / rep`: torch's `repeat_interleave` on the head
+/// axis, as audiocraft's `expand_repeated_kv` does.
+fn repeat_kv<T: WithDTypeF, B: Backend>(
+    x: &TensorView<T, B>,
+    rep: usize,
+) -> Result<TensorView<T, B>> {
+    let &[b, s, kv, d] = x.dims() else { xn::bail!("expected [b, s, kv, d], got {:?}", x.dims()) };
+    let x = x.contiguous()?.reshape((b, s, kv, 1, d))?;
+    let x = x.broadcast_as((b, s, kv, rep, d))?.contiguous()?;
+    Ok(x.reshape((b, s, kv * rep, d))?.into())
 }
 // ---- KV Cache ----
 
@@ -378,6 +427,7 @@ pub struct StreamingTransformerLayer<Q: BackendQ> {
 }
 
 impl<Q: BackendQ> StreamingTransformerLayer<Q> {
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         vb: &Path<Q::B>,
         d_model: usize,
@@ -386,6 +436,7 @@ impl<Q: BackendQ> StreamingTransformerLayer<Q> {
         context: Option<usize>,
         layer_scale: Option<f64>,
         kind: Kind,
+        attn: AttnShape,
     ) -> Result<Self> {
         let self_attn = match kind {
             Kind::Mimi => AttentionKind::Mimi(MimiStreamingMultiheadAttention::load(
@@ -398,6 +449,7 @@ impl<Q: BackendQ> StreamingTransformerLayer<Q> {
                 &vb.pp("self_attn"),
                 d_model,
                 num_heads,
+                attn,
             )?),
         };
 
@@ -508,11 +560,25 @@ impl<Q: BackendQ> StreamingTransformer<Q> {
         context: Option<usize>,
         max_period: f32,
         kind: Kind,
+        attn: Option<AttnShape>,
     ) -> Result<Self> {
-        if num_heads == 0 || !d_model.is_multiple_of(num_heads) {
-            xn::bail!("the config's {num_heads} attention heads do not divide its width {d_model}")
+        // Unless the checkpoint narrows or groups it, the attention is `d_model` wide with as
+        // many key/value heads as query heads.
+        let attn = attn.unwrap_or(AttnShape { dim: d_model, kv_heads: num_heads });
+        if kind == Kind::Mimi && attn != (AttnShape { dim: d_model, kv_heads: num_heads }) {
+            xn::bail!("the Mimi transformer has no separate attention width or grouped heads")
         }
-        let head_dim = d_model / num_heads;
+        let width = attn.dim;
+        if num_heads == 0 || !width.is_multiple_of(num_heads) {
+            xn::bail!("the config's {num_heads} attention heads do not divide its width {width}")
+        }
+        if attn.kv_heads == 0 || !num_heads.is_multiple_of(attn.kv_heads) {
+            xn::bail!(
+                "the config's {} key/value heads do not divide its {num_heads} attention heads",
+                attn.kv_heads
+            )
+        }
+        let head_dim = width / num_heads;
         let mut layers = Vec::with_capacity(num_layers);
         for i in 0..num_layers {
             layers.push(StreamingTransformerLayer::load(
@@ -523,6 +589,7 @@ impl<Q: BackendQ> StreamingTransformer<Q> {
                 context,
                 layer_scale,
                 kind,
+                attn,
             )?);
         }
 
@@ -638,6 +705,7 @@ impl<Q: BackendQ> ProjectedTransformer<Q> {
             Some(context),
             max_period,
             Kind::Mimi,
+            None,
         )?;
 
         let input_proj = if d_model != input_dimension {
@@ -795,6 +863,7 @@ mod bad_config_tests {
             None,
             10_000.,
             Kind::FlowLm,
+            None,
         )
         .map(drop)
     }
@@ -805,5 +874,96 @@ mod bad_config_tests {
             let err = load(8, heads).err().unwrap_or_else(|| panic!("{heads} heads for 8 wide"));
             assert!(err.to_string().contains("heads"), "{err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod gqa_tests {
+    use super::*;
+    use xn::CpuDevice;
+    use xn::nn::VB;
+
+    type Q = xn::Unquantized<f32, CpuDevice>;
+
+    fn vals(n: usize, seed: u32) -> Vec<f32> {
+        // Small deterministic pseudo-random values.
+        (0..n)
+            .map(|i| (((i as u32).wrapping_mul(2654435761) ^ seed) % 1000) as f32 / 1000.0 - 0.5)
+            .collect()
+    }
+
+    fn attention(
+        name: &str,
+        w_in: Vec<f32>,
+        rows: usize,
+        w_out: Vec<f32>,
+        e: usize,
+        h: usize,
+        attn: AttnShape,
+    ) -> StreamingMultiheadAttention<Q> {
+        let path = std::env::temp_dir().join(format!("ptts-gqa-{name}.safetensors"));
+        let t = |v: Vec<f32>, s: (usize, usize)| {
+            xn::TypedTensor::F32(Tensor::from_vec(v, s, &CpuDevice).unwrap())
+        };
+        let tensors = std::collections::HashMap::from([
+            ("in_proj.weight".to_string(), t(w_in, (rows, e))),
+            ("out_proj.weight".to_string(), t(w_out, (e, attn.dim))),
+        ]);
+        xn::safetensors::save_with_data_info(&tensors, None, &path).unwrap();
+        let vb = VB::load(&[&path], CpuDevice).unwrap().root();
+        StreamingMultiheadAttention::<Q>::load(&vb, e, h, attn).unwrap()
+    }
+
+    #[test]
+    fn grouped_heads_equal_full_attention_with_repeated_key_value_weights() {
+        // d_model 6, 4 query heads of 2 (attention 8 wide), 2 key/value heads: rep 2.
+        let (e, h, kv, d) = (6usize, 4usize, 2usize, 2usize);
+        let (qd, kvd) = (h * d, kv * d);
+        let w_in = vals((qd + 2 * kvd) * e, 7);
+        let w_out = vals(e * qd, 11);
+        let gqa = attention(
+            "grouped",
+            w_in.clone(),
+            qd + 2 * kvd,
+            w_out.clone(),
+            e,
+            h,
+            AttnShape { dim: qd, kv_heads: kv },
+        );
+        // The same weights with every key/value head's rows repeated for the query heads that
+        // share it (repeat_interleave), as a full attention.
+        let row = |r: usize| w_in[r * e..(r + 1) * e].to_vec();
+        let mut full = (0..qd).flat_map(row).collect::<Vec<_>>();
+        for block in [qd, qd + kvd] {
+            for head in 0..h {
+                let src = block + (head / (h / kv)) * d;
+                for j in 0..d {
+                    full.extend(row(src + j));
+                }
+            }
+        }
+        let mha = attention("full", full, 3 * qd, w_out, e, h, AttnShape { dim: qd, kv_heads: h });
+        let rope =
+            |t: usize, off: usize| RotaryEmbedding::new(d, off, t, 10000.0, &CpuDevice).unwrap();
+        let (mut sg, mut sf) = (gqa.init_state(1, 8).unwrap(), mha.init_state(1, 8).unwrap());
+        assert_eq!(sg.k_cache.dims(), &[1, 8, kv, d], "the cache holds only the key/value heads");
+        let x = Tensor::from_vec(vals(3 * e, 3), (1, 3, e), &CpuDevice).unwrap();
+        let max = |a: &Tensor<f32, CpuDevice>, b: &Tensor<f32, CpuDevice>| -> f32 {
+            let (a, b): (Vec<f32>, Vec<f32>) = (a.to_vec().unwrap(), b.to_vec().unwrap());
+            a.iter().zip(&b).map(|(x, y)| (x - y).abs()).fold(0., f32::max)
+        };
+        // A 3-step prompt with a causal mask, then one decode step through the cache.
+        let mask = sg.materialize_causal_mask(3).unwrap();
+        let (yg, yf) = (
+            gqa.forward(&x, &rope(3, 0), &mut sg, Some(&mask)).unwrap(),
+            mha.forward(&x, &rope(3, 0), &mut sf, Some(&mask)).unwrap(),
+        );
+        assert!(max(&yg, &yf) < 1e-6, "prompt: {}", max(&yg, &yf));
+        let x1 = Tensor::from_vec(vals(e, 5), (1, 1, e), &CpuDevice).unwrap();
+        let (yg, yf) = (
+            gqa.forward(&x1, &rope(1, 3), &mut sg, None).unwrap(),
+            mha.forward(&x1, &rope(1, 3), &mut sf, None).unwrap(),
+        );
+        assert!(max(&yg, &yf) < 1e-6, "decode: {}", max(&yg, &yf));
     }
 }

@@ -73,6 +73,11 @@ fn main() -> Result<()> {
     let ck = model_helpers::Checkpoint::locate(&args.model, options)?;
     let cfg = &ck.config;
     let f = &cfg.flow_lm;
+    anyhow::ensure!(
+        f.attn_shape().is_none(),
+        "the Core ML graph has d_model-wide attention with a key/value head per query head; this \
+         checkpoint narrows or groups it (attn_dim / num_kv_heads)"
+    );
     let dims = fl::Dims {
         d: f.d_model,
         heads: f.num_heads,

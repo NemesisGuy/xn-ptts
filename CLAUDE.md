@@ -203,6 +203,14 @@ sink in front of the frames, or the dropped token for an absent or empty conditi
 CFG null branch and a voice-less state get the dropped tokens alone. A checkpoint with sinks
 must set `cfg_null_audio_empty: true`.
 
+Attention shape: `flow_lm.attn_dim` (width of all query heads, `d_model` when absent) and
+`flow_lm.num_kv_heads` (grouped-query attention, `num_heads` when absent) follow audium's
+`attn_dim` / `kv_repeat`. `in_proj` rows are the queries, then the keys, then the values
+(`attn_dim / num_heads * num_kv_heads` each), `out_proj` maps `attn_dim` back to `d_model`, the KV
+cache stores only the key/value heads, and each is repeated for `num_heads / num_kv_heads`
+consecutive query heads at attention time (`repeat_interleave`). The Core ML export refuses
+these.
+
 ## Conventions to be aware of
 
 - `target-cpu=native` is on by default for host builds and `apple-m1` on the macOS CI release lane; do not assume binaries are portable.

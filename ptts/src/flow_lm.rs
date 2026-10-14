@@ -125,6 +125,28 @@ pub struct FlowLMConfig {
     /// pocket-tts checkpoints, `rms` for audiocraft (audium, phonon) ones.
     #[serde(default)]
     pub time_rms_norm: TimeRmsNorm,
+    /// Width of the attention, all query heads together, when it differs from `d_model`
+    /// (audium's `attn_dim`). `None`: `d_model`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attn_dim: Option<usize>,
+    /// Key/value heads for grouped-query attention, each shared by `num_heads / num_kv_heads`
+    /// consecutive query heads (audium's `kv_repeat`). `None`: `num_heads`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_kv_heads: Option<usize>,
+}
+
+impl FlowLMConfig {
+    /// The attention's shape when the checkpoint narrows or groups it, see
+    /// [`crate::transformer::AttnShape`]; `None` for the usual `d_model`-wide attention.
+    pub fn attn_shape(&self) -> Option<crate::transformer::AttnShape> {
+        if self.attn_dim.is_none() && self.num_kv_heads.is_none() {
+            return None;
+        }
+        Some(crate::transformer::AttnShape {
+            dim: self.attn_dim.unwrap_or(self.d_model),
+            kv_heads: self.num_kv_heads.unwrap_or(self.num_heads),
+        })
+    }
 }
 
 /// Transformer-based flow language model.
@@ -206,6 +228,7 @@ impl<Q: BackendQ> FlowLM<Q> {
             None,
             cfg.max_period,
             crate::transformer::Kind::FlowLm,
+            cfg.attn_shape(),
         )?;
         transformer.set_gelu(cfg.gelu);
 
