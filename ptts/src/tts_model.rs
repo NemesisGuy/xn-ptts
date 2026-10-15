@@ -65,9 +65,7 @@ pub struct TTSConfig {
     /// conditioner's learnt padding row, which preserves the historical behavior.
     #[serde(default)]
     pub cfg_null_text_empty: bool,
-    /// Learnt tokens in front of a prepended conditioning's frames, by audium conditioner name
-    /// (`speaker_wavs`, `transcript_in_segment`): see [`PrefixSink`]. Empty for a checkpoint
-    /// trained without them.
+    /// Learnt tokens in front of the `speaker_wavs` and `transcript_in_segment` conditionings.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub prefix_sinks: std::collections::BTreeMap<String, PrefixSinkConfig>,
     #[serde(default)]
@@ -129,19 +127,14 @@ pub struct TTSModel<Q: BackendQ> {
     text_sink: Option<PrefixSink<Q>>,
 }
 
-/// A prepended conditioning's sink, as audium's `BaseConditioner` with `sink: true` trains it.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct PrefixSinkConfig {
-    /// A second learnt token, `sink_dropped`, stands in for the sink when the conditioning is
-    /// absent (dropped, or empty), audium's `sink_dropped_token`.
+    /// Whether a `sink_dropped` token replaces the sink when the conditioning is empty.
     #[serde(default)]
     pub dropped_token: bool,
 }
 
-/// The `[1, 1, d_model]` token(s) opening a prepended conditioning: `sink` in front of its frames,
-/// always, and `dropped` instead when it has none, if the checkpoint has one. They survive
-/// attribute dropout and the CFG null, as in training.
-pub struct PrefixSink<Q: BackendQ> {
+struct PrefixSink<Q: BackendQ> {
     sink: Tensor<Q::T, Q::B>,
     dropped: Option<Tensor<Q::T, Q::B>>,
 }
@@ -149,15 +142,13 @@ pub struct PrefixSink<Q: BackendQ> {
 impl<Q: BackendQ> PrefixSink<Q> {
     fn load(vb: &Path<Q::B>, prefix: &str, cfg: &PrefixSinkConfig, d_model: usize) -> Result<Self> {
         let sink = vb.tensor(&format!("{prefix}.sink"), (1, 1, d_model))?;
-        let dropped = if cfg.dropped_token {
-            Some(vb.tensor(&format!("{prefix}.sink_dropped"), (1, 1, d_model))?)
-        } else {
-            None
-        };
+        let dropped = cfg
+            .dropped_token
+            .then(|| vb.tensor(&format!("{prefix}.sink_dropped"), (1, 1, d_model)))
+            .transpose()?;
         Ok(Self { sink, dropped })
     }
 
-    /// The token for a conditioning that has frames (`present`) or not.
     fn token(&self, present: bool) -> &Tensor<Q::T, Q::B> {
         match (&self.dropped, present) {
             (Some(dropped), false) => dropped,
@@ -183,21 +174,16 @@ impl<Q: BackendQ> TTSModel<Q> {
         let speaker_proj = crate::loader::load_speaker_proj(vb, cfg)?;
         let (mut speaker_sink, mut text_sink) = (None, None);
         for (name, sink) in cfg.prefix_sinks.iter() {
-            // Weight names after `loader::remap_key`: the transcript's live under `conditioner`.
             let (prefix, slot) = match name.as_str() {
                 "speaker_wavs" => {
                     ("flow_lm.condition_provider.conditioners.speaker_wavs", &mut speaker_sink)
                 }
                 "transcript_in_segment" => ("flow_lm.conditioner", &mut text_sink),
-                other => xn::bail!(
-                    "prefix_sinks names {other:?}; only speaker_wavs and transcript_in_segment \
-                     have sinks here"
-                ),
+                other => xn::bail!("unsupported prefix sink {other:?}"),
             };
             *slot = Some(PrefixSink::load(vb, prefix, sink, cfg.flow_lm.d_model)?);
         }
         if !cfg.prefix_sinks.is_empty() && !cfg.cfg_null_audio_empty {
-            // Training's null drops the voice to its sink; encoded silence is not that.
             xn::bail!("a checkpoint with prefix_sinks needs cfg_null_audio_empty: true")
         }
 
@@ -253,7 +239,6 @@ impl<Q: BackendQ> TTSModel<Q> {
     /// The CFG null branch's text: nothing with `cfg_null_text_empty`, as training's packed
     /// prefix gives for a dropped transcript, else the text conditioner's learnt padding row.
     pub fn prompt_text_null(&self, state: &mut TTSState<Q>) -> Result<()> {
-        // A dropped transcript keeps its sink (or dropped token) and nothing else.
         if let Some(sink) = &self.text_sink {
             let token = sink.token(false);
             let empty_latents = Tensor::zeros((1, 0, self.flow_lm.ldim), token.device())?;
@@ -272,20 +257,20 @@ impl<Q: BackendQ> TTSModel<Q> {
         Ok(())
     }
 
-    /// Positions [`Self::prompt_audio`] fills for a `frames`-long voice prompt: one more when
-    /// the voice conditioning has a sink.
+    /// Positions [`Self::prompt_audio`] fills for a `frames`-long voice prompt.
     pub fn voice_prompt_len(&self, frames: usize) -> usize {
         frames + usize::from(self.speaker_sink.is_some())
     }
 
-    /// Whether a state needs prompting even with no voice: true when the voice conditioning has
-    /// a sink, which an absent voice still contributes.
-    pub fn prompts_empty_voice(&self) -> bool {
-        self.speaker_sink.is_some()
+    /// Prompt with no voice, which only adds the voice sink's dropped token, if any.
+    pub fn prompt_no_voice(&self, state: &mut TTSState<Q>) -> Result<()> {
+        match self.speaker_sink {
+            Some(_) => self.prompt_audio(state, &self.empty_text()?),
+            None => Ok(()),
+        }
     }
 
-    /// Run flow LM step with audio conditioning, behind its sink (or dropped token, for an empty
-    /// prompt) when the checkpoint has one. Increments state.
+    /// Run flow LM step with audio conditioning. Increments state.
     pub fn prompt_audio(
         &self,
         state: &mut TTSState<Q>,

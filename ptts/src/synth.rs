@@ -480,19 +480,10 @@ impl<Q: BackendQ> SynthOf<Q> {
         }
     }
 
-    /// A state at `seq_budget` with no voice: bare, or holding the voice conditioning's sink
-    /// (or dropped token) when the checkpoint has one, as an absent voice gives in training.
     fn unprompted_state(&self, seq_budget: usize) -> Result<TTSState<Q>> {
         let mut state = self.model.init_flow_lm_state(1, seq_budget)?;
-        if self.model.prompts_empty_voice() {
-            self.model.prompt_audio(&mut state, &self.empty_prompt()?)?;
-        }
+        self.model.prompt_no_voice(&mut state)?;
         Ok(state)
-    }
-
-    /// A zero-frame voice prompt, for [`TTSModel::prompt_audio`] to contribute only its sink.
-    fn empty_prompt(&self) -> Result<Tensor<Q::T, Q::B>> {
-        Ok(Tensor::zeros((1, 0, self.cfg.flow_lm.d_model), self.model.device())?)
     }
 
     fn prime(&self, voice: &Voice<Q>, cfg_on: bool, frames: usize) -> Result<Primed<Q>> {
@@ -514,10 +505,9 @@ impl<Q: BackendQ> SynthOf<Q> {
             };
             let mut null_state = self.model.init_flow_lm_state(1, null_frames)?;
             null_state.flow_lm_state.conditions = conditions;
-            if self.cfg.cfg_null_audio_empty && self.model.prompts_empty_voice() {
-                // The voice is dropped, but its sink (or dropped token) stays, as in training.
-                self.model.prompt_audio(&mut null_state, &self.empty_prompt()?)?;
-            } else if !self.cfg.cfg_null_audio_empty {
+            if self.cfg.cfg_null_audio_empty {
+                self.model.prompt_no_voice(&mut null_state)?;
+            } else {
                 match voice.null_emb.as_ref() {
                     Some(null_emb) => self.model.prompt_audio(&mut null_state, null_emb)?,
                     None if !self.cfg.voices.is_empty() => {
