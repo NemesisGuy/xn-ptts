@@ -39,6 +39,8 @@ dependencies: [.product(name: "ptts", package: "xn-ptts")],
 
 Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum. Releases up to 0.4.0-rc.2 came before it: use the archive below for those.
 
+For a pre-release such as `0.4.0-rc.3`, use `exact: "0.4.0-rc.3"`: a `from:` range skips pre-release versions.
+
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
 You still need a prepared Core ML model bundle supplied with the selected checkpoint. If you already received one from us, use it directly with the release package and skip the model export below. No public HF repo or token is needed. If you received only a raw checkpoint, export it first. You can download a hosted Core ML bundle with `PhononModels.download(from:progress:)` or bundle it with the app as described below. Prepared public model bundles will be supplied when the model is released.

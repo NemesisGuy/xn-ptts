@@ -109,7 +109,8 @@ def builds_same_framework(sha, head):
     if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{sha}^{{commit}}"],
                       capture_output=True).returncode:
         git("fetch", "--quiet", "--no-tags", "--depth=1", "origin", sha)
-    changed = git("diff", "--name-only", sha, head).split()
+    # --no-renames: a file moved out of an input directory still counts as a change there.
+    changed = git("diff", "--name-only", "--no-renames", sha, head).splitlines()
     return not any(path.startswith(FRAMEWORK_INPUTS) for path in changed)
 
 
@@ -201,7 +202,8 @@ def fetch(args):
                 shutil.copy2(framework, args.output / FRAMEWORK)
                 print(f"pinned framework from run {run['databaseId']} (commit {run['headSha'][:8]})")
                 return
-    sys.exit(f"no main run that built this commit's framework has checksum {digest}")
+    sys.exit(f"no main run that built this commit's framework has checksum {digest}. Its artifact "
+             "may have expired, or the run is older than the last 100: rebuild on main and pin again")
 
 
 def check(args):
