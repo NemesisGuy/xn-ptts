@@ -12,6 +12,9 @@ services:
       PTTS_QUANT: q8
       # Serve the Wyoming protocol, which Home Assistant uses, as well as the OpenAI API.
       # PTTS_WYOMING_ADDR: 0.0.0.0:10200
+      # For clients that only offer OpenAI's voice names or always send a speed.
+      # PTTS_OPENAI_VOICES: default
+      # PTTS_IGNORE_SPEED: "true"
       # Voices of your own, made with the `create_voice` example, from the folder mounted below.
       # PTTS_VOICE_DIR: /voices
     volumes:
