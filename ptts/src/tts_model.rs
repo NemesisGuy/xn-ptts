@@ -80,16 +80,13 @@ pub struct TTSConfig {
 }
 
 impl TTSConfig {
-    /// The FFN activation of a config that does not name one: the exact GELU, which audiocraft
-    /// trains with, except for Pocket TTS checkpoints, which use the tanh approximation. Those are
-    /// the configs without an audiocraft `model_id` (every audium export writes one), such as the
-    /// default model, whose published config predates the `gelu` key.
+    /// The FFN activation when the config names none: tanh for Pocket TTS checkpoints (no
+    /// `model_id`), erf otherwise.
     pub fn default_gelu(&self) -> crate::transformer::Gelu {
         use crate::transformer::Gelu;
         if self.model_id.is_some() { Gelu::Erf } else { Gelu::Tanh }
     }
 
-    /// This config's Mimi config, with the FFN activation filled as [`Self::default_gelu`] says.
     fn mimi_with_gelu(&self, mimi: &MimiConfig) -> MimiConfig {
         MimiConfig { gelu: Some(mimi.gelu.unwrap_or_else(|| self.default_gelu())), ..mimi.clone() }
     }

@@ -348,9 +348,7 @@ pub enum Kind {
     FlowLm,
 }
 
-/// FFN activation. `erf` is the exact GELU, PyTorch's `F.gelu` default, which audiocraft (audium,
-/// phonon) trains with; Pocket TTS runs its transformers with `gelu(approximate="tanh")`.
-/// A config that does not name one gets [`crate::tts_model::TTSConfig::default_gelu`].
+/// FFN activation. `erf` is the exact GELU; Pocket TTS uses `gelu(approximate="tanh")`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Gelu {

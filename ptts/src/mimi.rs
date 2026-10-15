@@ -39,9 +39,7 @@ pub struct MimiConfig {
     pub transformer_dim_feedforward: usize,
     #[serde(default)]
     pub downsample_channel_wise: bool,
-    /// FFN activation of the encoder and decoder transformers. When absent, [`MimiDecoder::load`]
-    /// and [`MimiEncoder::load`] use the exact GELU; [`crate::tts_model::TTSModel::load`] and
-    /// [`crate::tts_model::MimiEnc::load`] fill it from [`crate::tts_model::TTSConfig::default_gelu`].
+    /// FFN activation of the encoder and decoder transformers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gelu: Option<crate::transformer::Gelu>,
 }
