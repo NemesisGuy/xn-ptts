@@ -65,6 +65,9 @@ pub struct TTSConfig {
     /// conditioner's learnt padding row, which preserves the historical behavior.
     #[serde(default)]
     pub cfg_null_text_empty: bool,
+    /// Learnt tokens in front of the `speaker_wavs` and `transcript_in_segment` conditionings.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub prefix_sinks: std::collections::BTreeMap<String, PrefixSinkConfig>,
     #[serde(default)]
     pub speaker_mimi: Option<SpeakerMimiConfig>,
     #[serde(default)]
@@ -120,6 +123,38 @@ pub struct TTSModel<Q: BackendQ> {
     lsd_decode_steps: usize,
     eos_threshold: f32,
     cfg_null_text_empty: bool,
+    speaker_sink: Option<PrefixSink<Q>>,
+    text_sink: Option<PrefixSink<Q>>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct PrefixSinkConfig {
+    /// Whether a `sink_dropped` token replaces the sink when the conditioning is empty.
+    #[serde(default)]
+    pub dropped_token: bool,
+}
+
+struct PrefixSink<Q: BackendQ> {
+    sink: Tensor<Q::T, Q::B>,
+    dropped: Option<Tensor<Q::T, Q::B>>,
+}
+
+impl<Q: BackendQ> PrefixSink<Q> {
+    fn load(vb: &Path<Q::B>, prefix: &str, cfg: &PrefixSinkConfig, d_model: usize) -> Result<Self> {
+        let sink = vb.tensor(&format!("{prefix}.sink"), (1, 1, d_model))?;
+        let dropped = cfg
+            .dropped_token
+            .then(|| vb.tensor(&format!("{prefix}.sink_dropped"), (1, 1, d_model)))
+            .transpose()?;
+        Ok(Self { sink, dropped })
+    }
+
+    fn token(&self, present: bool) -> &Tensor<Q::T, Q::B> {
+        match (&self.dropped, present) {
+            (Some(dropped), false) => dropped,
+            _ => &self.sink,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -137,6 +172,20 @@ impl<Q: BackendQ> TTSModel<Q> {
         let flow_lm = FlowLM::load(&vb.pp("flow_lm"), tokenizer, cfg, conditions)?;
         let mimi = MimiDecoder::load(&vb.pp("mimi"), &cfg.mimi_with_gelu(&cfg.mimi))?;
         let speaker_proj = crate::loader::load_speaker_proj(vb, cfg)?;
+        let (mut speaker_sink, mut text_sink) = (None, None);
+        for (name, sink) in cfg.prefix_sinks.iter() {
+            let (prefix, slot) = match name.as_str() {
+                "speaker_wavs" => {
+                    ("flow_lm.condition_provider.conditioners.speaker_wavs", &mut speaker_sink)
+                }
+                "transcript_in_segment" => ("flow_lm.conditioner", &mut text_sink),
+                other => xn::bail!("unsupported prefix sink {other:?}"),
+            };
+            *slot = Some(PrefixSink::load(vb, prefix, sink, cfg.flow_lm.d_model)?);
+        }
+        if !cfg.prefix_sinks.is_empty() && !cfg.cfg_null_audio_empty {
+            xn::bail!("a checkpoint with prefix_sinks needs cfg_null_audio_empty: true")
+        }
 
         Ok(Self {
             flow_lm,
@@ -145,6 +194,8 @@ impl<Q: BackendQ> TTSModel<Q> {
             lsd_decode_steps: cfg.lsd_decode_steps,
             eos_threshold: cfg.eos_threshold,
             cfg_null_text_empty: cfg.cfg_null_text_empty,
+            speaker_sink,
+            text_sink,
         })
     }
 
@@ -175,6 +226,10 @@ impl<Q: BackendQ> TTSModel<Q> {
     /// Run flow LM step with text tokens. Increments state.
     pub fn prompt_text(&self, state: &mut TTSState<Q>, text_tokens: &[u32]) -> Result<()> {
         let text_embeddings = self.flow_lm.conditioner.embed_tokens(text_tokens)?;
+        let text_embeddings = match &self.text_sink {
+            Some(sink) => Tensor::cat(&[sink.token(!text_tokens.is_empty()), &text_embeddings], 1)?,
+            None => text_embeddings,
+        };
         let dev = text_embeddings.device();
         let empty_latents = Tensor::zeros((1, 0, self.flow_lm.ldim), dev)?;
         self.run_backbone_and_increment(state, &text_embeddings, &empty_latents)?;
@@ -184,6 +239,11 @@ impl<Q: BackendQ> TTSModel<Q> {
     /// The CFG null branch's text: nothing with `cfg_null_text_empty`, as training's packed
     /// prefix gives for a dropped transcript, else the text conditioner's learnt padding row.
     pub fn prompt_text_null(&self, state: &mut TTSState<Q>) -> Result<()> {
+        if let Some(sink) = &self.text_sink {
+            let token = sink.token(false);
+            let empty_latents = Tensor::zeros((1, 0, self.flow_lm.ldim), token.device())?;
+            return self.run_backbone_and_increment(state, token, &empty_latents);
+        }
         if self.cfg_null_text_empty {
             return Ok(());
         }
@@ -197,6 +257,19 @@ impl<Q: BackendQ> TTSModel<Q> {
         Ok(())
     }
 
+    /// Positions [`Self::prompt_audio`] fills for a `frames`-long voice prompt.
+    pub fn voice_prompt_len(&self, frames: usize) -> usize {
+        frames + usize::from(self.speaker_sink.is_some())
+    }
+
+    /// Prompt with no voice, which only adds the voice sink's dropped token, if any.
+    pub fn prompt_no_voice(&self, state: &mut TTSState<Q>) -> Result<()> {
+        match self.speaker_sink {
+            Some(_) => self.prompt_audio(state, &self.empty_text()?),
+            None => Ok(()),
+        }
+    }
+
     /// Run flow LM step with audio conditioning. Increments state.
     pub fn prompt_audio(
         &self,
@@ -205,7 +278,13 @@ impl<Q: BackendQ> TTSModel<Q> {
     ) -> Result<()> {
         let dev = audio_conditioning.device();
         let empty_latents = Tensor::zeros((1, 0, self.flow_lm.ldim), dev)?;
-        let text_embeddings = Tensor::cat(&[&self.empty_text()?, audio_conditioning], 1)?;
+        let text_embeddings = match &self.speaker_sink {
+            Some(sink) => {
+                let present = audio_conditioning.dims3()?.1 > 0;
+                Tensor::cat(&[&self.empty_text()?, sink.token(present), audio_conditioning], 1)?
+            }
+            None => Tensor::cat(&[&self.empty_text()?, audio_conditioning], 1)?,
+        };
         self.run_backbone_and_increment(state, &text_embeddings, &empty_latents)?;
         Ok(())
     }
@@ -492,6 +571,19 @@ mod tests {
         for &(input, text, frames) in cases {
             assert_eq!(prepare_text_prompt(input), (text.to_string(), frames), "{input:?}");
         }
+    }
+
+    #[test]
+    fn prefix_sinks_read_audium_conditioner_names() {
+        let mut json = serde_json::to_value(crate::test_config()).unwrap();
+        assert!(json.get("prefix_sinks").is_none(), "no sinks, no key");
+        json["prefix_sinks"] = serde_json::json!({
+            "speaker_wavs": {"dropped_token": true},
+            "transcript_in_segment": {},
+        });
+        let cfg: TTSConfig = serde_json::from_value(json).unwrap();
+        assert!(cfg.prefix_sinks["speaker_wavs"].dropped_token);
+        assert!(!cfg.prefix_sinks["transcript_in_segment"].dropped_token);
     }
 
     #[test]

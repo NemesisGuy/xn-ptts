@@ -410,12 +410,12 @@ impl<Q: BackendQ> SynthOf<Q> {
         cfg_coef: Option<f32>,
     ) -> Result<(TTSState<Q>, Option<(f32, TTSState<Q>)>)> {
         let Some((name, voice)) = self.voice_for(voice)? else {
-            let mut state = self.model.init_flow_lm_state(1, seq_budget)?;
+            let mut state = self.unprompted_state(seq_budget)?;
             state.flow_lm_state.conditions = self.conditions.clone();
             let cfg_state = match cfg_coef {
                 None => None,
                 Some(coef) => {
-                    let mut null_state = self.model.init_flow_lm_state(1, seq_budget)?;
+                    let mut null_state = self.unprompted_state(seq_budget)?;
                     null_state.flow_lm_state.conditions = self.conditions.clone();
                     Some((coef, null_state))
                 }
@@ -423,7 +423,7 @@ impl<Q: BackendQ> SynthOf<Q> {
             return Ok((state, cfg_state));
         };
 
-        let frames = voice.emb.dim(1usize)?;
+        let frames = self.model.voice_prompt_len(voice.emb.dim(1usize)?);
         if frames >= seq_budget {
             // Its own variant rather than `SeqBudgetExceeded`: nothing about the text is
             // wrong here, so "split the text" would be useless advice, and the prompt
@@ -480,6 +480,12 @@ impl<Q: BackendQ> SynthOf<Q> {
         }
     }
 
+    fn unprompted_state(&self, seq_budget: usize) -> Result<TTSState<Q>> {
+        let mut state = self.model.init_flow_lm_state(1, seq_budget)?;
+        self.model.prompt_no_voice(&mut state)?;
+        Ok(state)
+    }
+
     fn prime(&self, voice: &Voice<Q>, cfg_on: bool, frames: usize) -> Result<Primed<Q>> {
         let conditions = voice.conditions.clone().or_else(|| self.conditions.clone());
         let mut state = self.model.init_flow_lm_state(1, frames)?;
@@ -492,12 +498,16 @@ impl<Q: BackendQ> SynthOf<Q> {
             // Sized to what the null branch will consume, so the `emb`/`null_emb` length
             // invariant stays local to registration rather than load-bearing here.
             let null_frames = match voice.null_emb.as_ref() {
-                Some(null_emb) if !self.cfg.cfg_null_audio_empty => null_emb.dim(1usize)?,
+                Some(null_emb) if !self.cfg.cfg_null_audio_empty => {
+                    self.model.voice_prompt_len(null_emb.dim(1usize)?)
+                }
                 _ => frames,
             };
             let mut null_state = self.model.init_flow_lm_state(1, null_frames)?;
             null_state.flow_lm_state.conditions = conditions;
-            if !self.cfg.cfg_null_audio_empty {
+            if self.cfg.cfg_null_audio_empty {
+                self.model.prompt_no_voice(&mut null_state)?;
+            } else {
                 match voice.null_emb.as_ref() {
                     Some(null_emb) => self.model.prompt_audio(&mut null_state, null_emb)?,
                     None if !self.cfg.voices.is_empty() => {
