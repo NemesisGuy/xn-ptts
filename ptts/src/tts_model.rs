@@ -65,7 +65,7 @@ pub struct TTSConfig {
     /// conditioner's learnt padding row, which preserves the historical behavior.
     #[serde(default)]
     pub cfg_null_text_empty: bool,
-    /// Learnt tokens in front of the voice and `transcript_in_segment` conditionings, by name.
+    /// Learnt tokens in front of the `speaker_wavs` and `transcript_in_segment` conditionings.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub prefix_sinks: std::collections::BTreeMap<String, PrefixSinkConfig>,
     #[serde(default)]
@@ -175,13 +175,13 @@ impl<Q: BackendQ> TTSModel<Q> {
         let (mut speaker_sink, mut text_sink) = (None, None);
         for (name, sink) in cfg.prefix_sinks.iter() {
             let (prefix, slot) = match name.as_str() {
-                "transcript_in_segment" => ("flow_lm.conditioner".to_string(), &mut text_sink),
-                _ => (format!("flow_lm.condition_provider.conditioners.{name}"), &mut speaker_sink),
+                "speaker_wavs" => {
+                    ("flow_lm.condition_provider.conditioners.speaker_wavs", &mut speaker_sink)
+                }
+                "transcript_in_segment" => ("flow_lm.conditioner", &mut text_sink),
+                other => xn::bail!("unsupported prefix sink {other:?}"),
             };
-            if slot.is_some() {
-                xn::bail!("prefix_sinks names more than one voice conditioning")
-            }
-            *slot = Some(PrefixSink::load(vb, &prefix, sink, cfg.flow_lm.d_model)?);
+            *slot = Some(PrefixSink::load(vb, prefix, sink, cfg.flow_lm.d_model)?);
         }
         if !cfg.prefix_sinks.is_empty() && !cfg.cfg_null_audio_empty {
             xn::bail!("a checkpoint with prefix_sinks needs cfg_null_audio_empty: true")
