@@ -118,9 +118,9 @@ pub struct FlowLMConfig {
     pub flow_dim: usize,
     pub flow_depth: usize,
     pub ldim: usize,
-    /// FFN activation, `tanh` (Pocket TTS) unless the checkpoint was trained with `erf`.
-    #[serde(default)]
-    pub gelu: crate::transformer::Gelu,
+    /// FFN activation; when absent, [`TTSConfig::default_gelu`] decides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gelu: Option<crate::transformer::Gelu>,
     /// The flow net's time-embedding RMS norm, see [`TimeRmsNorm`]: `rms_var` (the default) for
     /// pocket-tts checkpoints, `rms` for audiocraft (audium, phonon) ones.
     #[serde(default)]
@@ -207,7 +207,7 @@ impl<Q: BackendQ> FlowLM<Q> {
             cfg.max_period,
             crate::transformer::Kind::FlowLm,
         )?;
-        transformer.set_gelu(cfg.gelu);
+        transformer.set_gelu(cfg.gelu.unwrap_or_else(|| config.default_gelu()));
 
         let emb_std = vb.tensor("emb_std", (cfg.ldim,))?;
         let emb_mean = vb.tensor("emb_mean", (cfg.ldim,))?;

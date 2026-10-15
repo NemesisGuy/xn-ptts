@@ -39,10 +39,9 @@ pub struct MimiConfig {
     pub transformer_dim_feedforward: usize,
     #[serde(default)]
     pub downsample_channel_wise: bool,
-    /// FFN activation of the encoder and decoder transformers, `tanh` (Pocket TTS) unless the
-    /// checkpoint was trained with `erf`.
-    #[serde(default)]
-    pub gelu: crate::transformer::Gelu,
+    /// FFN activation of the encoder and decoder transformers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gelu: Option<crate::transformer::Gelu>,
 }
 
 pub struct MimiEncoder<Q: BackendQ> {
@@ -100,7 +99,7 @@ impl<Q: BackendQ> MimiEncoder<Q> {
             cfg.transformer_max_period,
             cfg.transformer_dim_feedforward,
         )?;
-        encoder_transformer.transformer.set_gelu(cfg.gelu);
+        encoder_transformer.transformer.set_gelu(cfg.gelu.unwrap_or_default());
 
         let hop_length: usize = cfg.ratios.iter().product();
         let encoder_frame_rate = cfg.sample_rate as f64 / hop_length as f64;
@@ -174,7 +173,7 @@ impl<Q: BackendQ> MimiDecoder<Q> {
             cfg.transformer_max_period,
             cfg.transformer_dim_feedforward,
         )?;
-        decoder_transformer.transformer.set_gelu(cfg.gelu);
+        decoder_transformer.transformer.set_gelu(cfg.gelu.unwrap_or_default());
         let hop_length: usize = cfg.ratios.iter().product();
         let encoder_frame_rate = cfg.sample_rate as f64 / hop_length as f64;
 

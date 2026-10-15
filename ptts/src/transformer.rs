@@ -348,13 +348,12 @@ pub enum Kind {
     FlowLm,
 }
 
-/// FFN activation. Pocket TTS runs its transformers with PyTorch's `gelu(approximate="tanh")`;
-/// `erf` is the exact GELU, for checkpoints trained with it.
+/// FFN activation. `erf` is the exact GELU; Pocket TTS uses `gelu(approximate="tanh")`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Gelu {
-    #[default]
     Tanh,
+    #[default]
     Erf,
 }
 

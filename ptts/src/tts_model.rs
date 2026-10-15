@@ -80,6 +80,17 @@ pub struct TTSConfig {
 }
 
 impl TTSConfig {
+    /// The FFN activation when the config names none: tanh for Pocket TTS checkpoints (no
+    /// `model_id`), erf otherwise.
+    pub fn default_gelu(&self) -> crate::transformer::Gelu {
+        use crate::transformer::Gelu;
+        if self.model_id.is_some() { Gelu::Erf } else { Gelu::Tanh }
+    }
+
+    fn mimi_with_gelu(&self, mimi: &MimiConfig) -> MimiConfig {
+        MimiConfig { gelu: Some(mimi.gelu.unwrap_or_else(|| self.default_gelu())), ..mimi.clone() }
+    }
+
     pub fn model_ext(&self) -> Option<String> {
         self.model_id.as_ref().map(|id| format!("{}@{}", id.sig, id.epoch))
     }
@@ -124,7 +135,7 @@ impl<Q: BackendQ> TTSModel<Q> {
         conditions: &HashMap<String, String>,
     ) -> Result<Self> {
         let flow_lm = FlowLM::load(&vb.pp("flow_lm"), tokenizer, cfg, conditions)?;
-        let mimi = MimiDecoder::load(&vb.pp("mimi"), &cfg.mimi)?;
+        let mimi = MimiDecoder::load(&vb.pp("mimi"), &cfg.mimi_with_gelu(&cfg.mimi))?;
         let speaker_proj = crate::loader::load_speaker_proj(vb, cfg)?;
 
         Ok(Self {
@@ -323,8 +334,8 @@ impl<Q: BackendQ> MimiEnc<Q> {
     /// voice embedding on their own, and conditioning on them makes the model babble or stop
     /// at once with no other symptom, so a missing weight is better caught here.
     pub fn load(vb: &Path<Q::B>, cfg: &TTSConfig) -> Result<Self> {
-        let mimi_cfg = cfg.speaker_mimi_cfg();
-        let mimi = MimiEncoder::load(&vb.pp(cfg.speaker_mimi_prefix()), mimi_cfg)?;
+        let mimi_cfg = cfg.mimi_with_gelu(cfg.speaker_mimi_cfg());
+        let mimi = MimiEncoder::load(&vb.pp(cfg.speaker_mimi_prefix()), &mimi_cfg)?;
         if !vb.contains(crate::loader::SPEAKER_PROJ_WEIGHT) {
             xn::bail!(
                 "checkpoint has a speaker encoder under `{}` but no speaker projection \
@@ -511,6 +522,33 @@ mod tests {
         assert!(!old.cfg_null_text_empty);
         assert!(old.speaker_mimi.is_none());
         assert!(old.conditioners.is_empty() && old.fuser.is_none());
+    }
+
+    #[test]
+    fn gelu_defaults_to_erf_except_for_pocket_tts_checkpoints() {
+        use crate::transformer::Gelu;
+        // No `model_id`: a Pocket TTS checkpoint, such as the default model, trained with tanh.
+        let pocket = crate::test_config();
+        assert!(pocket.model_id.is_none() && pocket.flow_lm.gelu.is_none());
+        assert_eq!(pocket.default_gelu(), Gelu::Tanh);
+        assert_eq!(pocket.mimi_with_gelu(&pocket.mimi).gelu, Some(Gelu::Tanh));
+
+        // An audium export without the key (written before it existed) was trained with erf.
+        let mut json = serde_json::to_value(crate::test_config()).unwrap();
+        let id = serde_json::json!({"sig": "78217628", "epoch": 200});
+        json.as_object_mut().unwrap().insert("model_id".into(), id);
+        let audium: TTSConfig = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(audium.default_gelu(), Gelu::Erf);
+        assert_eq!(audium.mimi_with_gelu(&audium.mimi).gelu, Some(Gelu::Erf));
+
+        // A key in the config wins either way, and round-trips.
+        json["flow_lm"]["gelu"] = serde_json::json!("tanh");
+        json["mimi"]["gelu"] = serde_json::json!("tanh");
+        let named: TTSConfig = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(named.flow_lm.gelu, Some(Gelu::Tanh));
+        assert_eq!(named.mimi_with_gelu(&named.mimi).gelu, Some(Gelu::Tanh));
+        assert_eq!(serde_json::to_value(&named).unwrap()["mimi"]["gelu"], "tanh");
+        assert_eq!(Gelu::default(), Gelu::Erf);
     }
 
     #[test]
