@@ -190,7 +190,7 @@ After the character pass, each word goes through the rewrite rules (`ptts/src/pr
 
 Quantization story: only `flow_lm.transformer.layers.*.{linear1,linear2,self_attn.in_proj,self_attn.out_proj}.weight` get GGML-quantized (see `examples/quantize.rs`); Mimi stays in `Unquantized<f32>`. The Mimi quantizer codebook tensors (`mimi.quantizer.*` except `output_proj`) are excluded from output GGUFs since the runtime uses `dummy_quantizer.rs`.
 
-Prefix sinks: `prefix_sinks` in `config.json` lists the `speaker_wavs` and
+Prefix sinks: `prefix_sinks` in `config.json` lists, by conditioner name, the voice and
 `transcript_in_segment` conditionings that get a learnt token in front of their frames, or a
 `sink_dropped` one when they are empty (`dropped_token`). A checkpoint with sinks must set
 `cfg_null_audio_empty: true`.
