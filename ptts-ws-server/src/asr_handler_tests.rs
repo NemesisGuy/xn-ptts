@@ -76,12 +76,15 @@ fn requests_parse_as_the_voice_agent_sends_them() {
     let eos: SttRequest = serde_json::from_str(r#"{"type":"end_of_stream"}"#).unwrap();
     assert!(matches!(eos, SttRequest::EndOfStream));
     let peek: SttRequest = serde_json::from_str(r#"{"type":"peek","peek_id":42}"#).unwrap();
-    assert!(matches!(peek, SttRequest::Peek { peek_id: 42 }));
+    assert!(matches!(peek, SttRequest::Peek { peek_id: 42, frames_after_speech: None }));
     // u64 ids, the full range.
     let peek: SttRequest =
         serde_json::from_value(serde_json::json!({"type": "peek", "peek_id": u64::MAX})).unwrap();
-    assert!(matches!(peek, SttRequest::Peek { peek_id: u64::MAX }));
+    assert!(matches!(peek, SttRequest::Peek { peek_id: u64::MAX, frames_after_speech: None }));
     assert!(serde_json::from_str::<SttRequest>(r#"{"type":"peek"}"#).is_err());
+    let peek: SttRequest =
+        serde_json::from_str(r#"{"type":"peek","peek_id":1,"frames_after_speech":9}"#).unwrap();
+    assert!(matches!(peek, SttRequest::Peek { peek_id: 1, frames_after_speech: Some(9) }));
 }
 
 #[test]
@@ -452,6 +455,45 @@ async fn peeks_answer_in_order_with_the_audio_and_leave_the_stream_alone() {
         assert!(fork[0][FRAME_SIZE / 2..].iter().all(|&x| x == 0.0));
         assert!(fork[1..].iter().all(|f| f.iter().all(|&x| x == 0.0)));
     }
+}
+
+/// `frames_after_speech` stops the fork that many frames past the last speech step, never
+/// past the full delay, and leaves the live stream alone.
+#[tokio::test]
+async fn a_trimmed_peek_stops_after_the_speech() {
+    // The fake reports a frame's level as its inactivity: 0.25 is speech, 0.75 is not.
+    let speech = vec![8192i16; FRAME_SIZE];
+    let quiet = vec![24576i16; FRAME_SIZE * 3];
+    let trimmed = |after: u32| {
+        text(serde_json::json!({"type": "peek", "peek_id": after, "frames_after_speech": after}))
+    };
+    let (app, _, _, forked) = fake_app_with_forks();
+    let replies = run(
+        app,
+        vec![
+            setup_message(None, "pcm"),
+            audio_message(&speech),
+            audio_message(&quiet),
+            // Speech at step 0 and steps 0-3 run: 5 frames past it are steps 4 and 5,
+            // 2 frames past it have run already, 100 is capped at the full delay.
+            trimmed(5),
+            trimmed(2),
+            trimmed(100),
+            peek_message(0),
+            text(serde_json::json!({"type": "end_of_stream"})),
+        ],
+    )
+    .await;
+    let peeks: Vec<_> = replies
+        .iter()
+        .filter_map(|r| match r {
+            SttReply::PeekResult { peek_id, words, .. } => Some((*peek_id, words.len())),
+            _ => None,
+        })
+        .collect();
+    // The fake emits a word on every frame of silence.
+    assert_eq!(peeks, [(5, 2), (2, 0), (100, DELAY + 1), (0, DELAY + 1)]);
+    assert_eq!(forked.lock().unwrap().len(), 2 + 2 * (DELAY + 1));
 }
 
 #[tokio::test]

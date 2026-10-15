@@ -93,6 +93,13 @@ pub enum SttRequest {
     /// answered with [`SttReply::PeekResult`].
     Peek {
         peek_id: u64,
+        /// Run the copy only until this many frames past the last `step` whose shortest
+        /// horizon said speech (inactivity below 0.5), rather than the full
+        /// `delay_in_frames + 1`: a word comes out a few frames short of the full delay after
+        /// the speech ends, and every frame of the copy costs a model step. A word still in
+        /// flight past that point is missing from the result. Absent: the full delay.
+        #[serde(default)]
+        frames_after_speech: Option<u32>,
     },
     EndOfStream,
 }

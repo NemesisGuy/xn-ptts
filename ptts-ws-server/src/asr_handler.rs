@@ -103,8 +103,9 @@ enum Input {
     /// (fewer only for the zero-padded last frame).
     Frame { pcm: Vec<f32>, real: usize },
     /// Answer a `peek`: run `partial` (the client's audio short of a frame, buffered here)
-    /// and the text delay on a fork of the stream, and send the words that come out.
-    Peek { peek_id: u64, partial: Vec<f32> },
+    /// and the text delay on a fork of the stream, and send the words that come out. With
+    /// `frames_after_speech`, the fork stops that many frames past the last speech step.
+    Peek { peek_id: u64, partial: Vec<f32>, frames_after_speech: Option<u32> },
     /// Run the text delay out on silence, then send `end_of_stream`.
     Finish,
 }
@@ -213,10 +214,11 @@ pub(crate) async fn run_session(
                     }
                 }
             }
-            (Some((frames, _)), SttRequest::Peek { peek_id }) => {
+            (Some((frames, _)), SttRequest::Peek { peek_id, frames_after_speech }) => {
                 // The partial frame stays buffered for the live stream; the fork gets a copy.
                 let partial = pending.clone();
-                if frames.send(Input::Peek { peek_id, partial }).await.is_err() {
+                let peek = Input::Peek { peek_id, partial, frames_after_speech };
+                if frames.send(peek).await.is_err() {
                     break 'session Ok(());
                 }
             }
@@ -315,6 +317,8 @@ fn infer(
     let step_duration_s = 1.0 / FRAME_RATE;
     let mut step_idx = 0u64;
     let mut samples = 0usize;
+    // The last step whose shortest horizon said speech, for a trimmed peek.
+    let mut last_speech_step: Option<u64> = None;
     while let Some(input) = frames.blocking_recv() {
         if replies.is_closed() {
             return Ok(());
@@ -323,6 +327,9 @@ fn infer(
             Input::Frame { pcm, real } => {
                 let step = stream.step(&pcm)?;
                 samples += real;
+                if step.vad.first().is_some_and(|v| v.inactivity_prob < 0.5) {
+                    last_speech_step = Some(step_idx);
+                }
                 let vad = step
                     .vad
                     .iter()
@@ -345,8 +352,16 @@ fn infer(
                     return Ok(());
                 }
             }
-            Input::Peek { peek_id, partial } => {
-                let words = peek(recognizer.as_ref(), stream.as_ref(), &partial)?;
+            Input::Peek { peek_id, partial, frames_after_speech } => {
+                let full = usize::from(!partial.is_empty()) + recognizer.delay_frames() + 1;
+                // The fork's frames continue the live step indices from `step_idx`.
+                let steps = match (frames_after_speech, last_speech_step) {
+                    (Some(after), Some(last)) => (last + u64::from(after) + 1)
+                        .saturating_sub(step_idx)
+                        .min(full as u64) as usize,
+                    _ => full,
+                };
+                let words = peek(recognizer.as_ref(), stream.as_ref(), &partial, steps)?;
                 let reply = SttReply::PeekResult {
                     peek_id,
                     total_duration_s: (samples + partial.len()) as f64 / SAMPLE_RATE as f64,
@@ -374,21 +389,29 @@ fn infer(
 }
 
 /// The words `stream` would still send if the audio ended after `partial` (fewer than
-/// [`FRAME_SIZE`] samples): what `end_of_stream` would flush, computed on a fork.
+/// [`FRAME_SIZE`] samples): what `end_of_stream` would flush, computed on a fork that runs
+/// `steps` frames, the padded partial frame first. `steps` of `delay_frames() + 1` (plus one
+/// for a partial frame) is the full flush; fewer can miss the last words.
 fn peek(
     recognizer: &dyn Recognizer,
     stream: &dyn RecognizerStream,
     partial: &[f32],
+    steps: usize,
 ) -> Result<Vec<PeekWord>> {
+    if steps == 0 {
+        return Ok(vec![]);
+    }
     let mut fork = stream.fork()?;
     let mut events = vec![];
+    let mut silent_steps = steps;
     if !partial.is_empty() {
         let mut pcm = partial.to_vec();
         pcm.resize(FRAME_SIZE, 0.0);
         events.extend(fork.step(&pcm)?.events);
+        silent_steps -= 1;
     }
     let silence = vec![0f32; FRAME_SIZE];
-    for _ in 0..recognizer.delay_frames() + 1 {
+    for _ in 0..silent_steps {
         events.extend(fork.step(&silence)?.events);
     }
     events
