@@ -100,7 +100,8 @@ impl VoiceCatalog {
     /// The voice name to pass to `synth` for `query`. A voice `synth` already has wins,
     /// matched as [`Self::find`] matches; otherwise the catalog voice `query` names is
     /// downloaded and registered under its name. A name neither knows comes back unchanged, for
-    /// `synth` to report with the voices it has.
+    /// `synth` to report with the voices it has. If the catalog cannot be read, the error names
+    /// the voice and the ones `synth` has.
     pub fn register(&self, synth: &mut Synth, query: &str) -> Result<String> {
         let known = synth.voices();
         let folded = fold(query);
@@ -109,7 +110,16 @@ impl VoiceCatalog {
         {
             return Ok(name.clone());
         }
-        let Some(voice) = self.find(query)? else { return Ok(query.to_string()) };
+        // Offline, or without access to the catalog's repo, the voice asked for and the ones the
+        // model has say more than the download error alone.
+        let found = self.find(query).map_err(|e| {
+            Error::not_found(format!(
+                "no voice '{query}': the model has {}, and the voice catalog could not be read: \
+                 {e}",
+                known.join(", ")
+            ))
+        })?;
+        let Some(voice) = found else { return Ok(query.to_string()) };
         if !known.contains(&voice.name) {
             let path = self.fetch(voice)?;
             synth.add_voice_file(&voice.name, &path)?;

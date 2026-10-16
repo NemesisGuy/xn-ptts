@@ -315,6 +315,18 @@ def test_an_unknown_voice_lists_the_ones_that_exist(tts):
 
 
 @pytest.mark.checkpoint
+def test_an_unknown_voice_with_an_unreadable_catalog_still_names_the_voices(tts, tmp_path):
+    model = os.environ["PTTS_TEST_MODEL"]
+    missing = tmp_path / "voices.jsonl"
+    other = ptts.TTS(model, lang="en", device="cpu", quant="q8", voice_catalog=missing)
+    with pytest.raises(LookupError) as e:
+        other.synth("hi", voice="definitely-not-a-voice")
+    message = str(e.value)
+    assert "definitely-not-a-voice" in message and other.voices[0] in message
+    assert str(missing) in message
+
+
+@pytest.mark.checkpoint
 def test_the_same_seed_gives_the_same_audio(tts):
     import numpy as np
 
