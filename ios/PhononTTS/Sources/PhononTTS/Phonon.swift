@@ -70,17 +70,22 @@ public final class Phonon: @unchecked Sendable {
     // Every call into the handle runs here: the Rust side is not reentrant.
     private let queue: DispatchQueue
     private let current: Mutex<String>
+    private let currentLanguage: Mutex<Language>
 
     /// The voice speaking, one of `voices`.
     public var voice: String { current.withLock { $0 } }
 
-    private init(handle: OpaquePointer, queue: DispatchQueue) {
+    /// How text is normalized, as given to `load` or `setLanguage(_:)`.
+    public var language: Language { currentLanguage.withLock { $0 } }
+
+    private init(handle: OpaquePointer, queue: DispatchQueue, language: Language) {
         self.handle = handle
         self.queue = queue
         let names = Self.names(ptts_voices(handle))
         voices = names
         languages = Self.names(ptts_languages(handle))
         current = Mutex(names.first ?? "")
+        currentLanguage = Mutex(language)
     }
 
     private static func names(_ block: UnsafePointer<CChar>?) -> [String] {
@@ -140,7 +145,7 @@ public final class Phonon: @unchecked Sendable {
             }) else { throw lastError(nil) }
             return Pointer(p: h)
         }
-        return Phonon(handle: h.p, queue: queue)
+        return Phonon(handle: h.p, queue: queue, language: language)
     }
 
     /// Switch to another of `voices`. This conditions the model on it, up to about 0.6 s on
@@ -151,6 +156,18 @@ public final class Phonon: @unchecked Sendable {
             guard name.withCString({ ptts_set_voice(h.p, $0) }) else { throw Self.lastError(h.p) }
         }
         current.withLock { $0 = name }
+    }
+
+    /// Normalize text as `language` from the next utterance on. Nothing is reloaded, so this is
+    /// immediate. Pair it with a voice of that language: the voice carries the accent.
+    public func setLanguage(_ language: Language) async throws {
+        let h = Pointer(p: handle)
+        try await Self.run(on: queue) {
+            guard language.rawValue.withCString({ ptts_set_language(h.p, $0) }) else {
+                throw Self.lastError(h.p)
+            }
+        }
+        currentLanguage.withLock { $0 = language }
     }
 
     private final class Sink: @unchecked Sendable {

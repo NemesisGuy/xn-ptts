@@ -20,6 +20,9 @@ pub struct Engine {
     voices: Vec<String>,
     languages: Vec<String>,
     voice: Option<String>,
+    /// Applied here rather than by `synth`, which is built with `Normalize::OFF`, so that
+    /// `set_language` can change it without a reload. `Synth` applies it first thing anyway.
+    normalize: Normalize,
     /// Samples per frame, to count frames in what the stream hands back.
     frame_size: usize,
 }
@@ -41,7 +44,7 @@ impl Engine {
                 ),
             )?;
         let frame_rate = cfg.mimi.frame_rate;
-        let mut builder = SynthBuilder::new(cfg, weights, normalize)
+        let mut builder = SynthBuilder::new(cfg, weights, Normalize::OFF)
             .tokenizer_file(dir.join("tokenizer.json"))
             .device(DeviceKind::Cpu)
             .quant(quant);
@@ -54,6 +57,7 @@ impl Engine {
             voices: synth.voices(),
             languages: synth.languages().to_vec(),
             voice: synth.default_voice(),
+            normalize,
             synth,
             frame_size,
         })
@@ -73,6 +77,12 @@ impl Engine {
         Ok(())
     }
 
+    /// Normalize text as `lang` from the next utterance on.
+    pub fn set_language(&mut self, lang: &str) -> Result<(), String> {
+        self.normalize = lang.parse::<Normalize>().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub fn speak(
         &mut self,
         text: &str,
@@ -80,7 +90,8 @@ impl Engine {
     ) -> Result<PttsResult, String> {
         let start = std::time::Instant::now();
         let opts = SpeechOptions { voice: self.voice.clone(), ..Default::default() };
-        let stream = self.synth.stream_with(text, &opts).map_err(|e| e.to_string())?;
+        let text = self.normalize.apply(text);
+        let stream = self.synth.stream_with(&text, &opts).map_err(|e| e.to_string())?;
         let (mut samples, mut ttfa) = (0, None);
         // Dropping the stream on an early return stops generation.
         for pcm in stream {

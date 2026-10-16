@@ -49,7 +49,7 @@ APK.
 
 ## 3. The interface
 
-[`ptts.h`](../ptts-ffi/include/ptts.h) has seven calls:
+[`ptts.h`](../ptts-ffi/include/ptts.h) has eight calls:
 
 | Call | What it does |
 |---|---|
@@ -57,6 +57,7 @@ APK.
 | `ptts_voices(h)` | The voice names, as one block of NUL-separated strings. |
 | `ptts_set_voice(h, name)` | Speak in one of them from now on. |
 | `ptts_languages(h)` | The languages the model was trained for, in the same format. |
+| `ptts_set_language(h, lang)` | Normalize text as `lang` from now on, with no reload. |
 | `ptts_speak(h, text, callback, user, &result)` | Speak `text`, passing the audio to `callback` as it is made. |
 | `ptts_last_error(h)` | Why the last call failed. Pass `NULL` after a failed `ptts_new`. |
 | `ptts_free(h)` | Free the model. Nothing else does. |
@@ -155,16 +156,16 @@ if (!ptts_speak(h, "Hello from Phonon.", on_audio, NULL, &result)) {
 ptts_free(h);
 ```
 
-`ptts_speak` and `ptts_set_voice` return `false` on failure. Strings from `ptts_voices`,
+`ptts_speak`, `ptts_set_voice` and `ptts_set_language` return `false` on failure. Strings from `ptts_voices`,
 `ptts_languages` and `ptts_last_error` belong to the library: copy them if you keep them.
 
 ### Flutter, Unity, .NET and other frameworks
 
-Load `libptts_ffi.so` with the framework's usual way of calling C, and declare the six calls from
+Load `libptts_ffi.so` with the framework's usual way of calling C, and declare the calls from
 `ptts.h`. In Flutter that is `dart:ffi`; in C#, `[DllImport("ptts_ffi")]`; in Unity, a native
 plugin under `Plugins/Android/arm64-v8a`. Three details matter in any language:
 
-- `ptts_speak`, `ptts_set_voice` and the callback use a C `bool`, which is one byte.
+- `ptts_speak`, `ptts_set_voice`, `ptts_set_language` and the callback use a C `bool`, which is one byte.
 - `size_t` is 64 bits on both ABIs the library is built for.
 - The callback runs on the thread that called `ptts_speak`, so call it from a thread your runtime
   can run callbacks on.
