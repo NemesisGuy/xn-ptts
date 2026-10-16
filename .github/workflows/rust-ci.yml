@@ -283,6 +283,13 @@ jobs:
         run: |
           ./ios/build-xcframework.sh
           swift build --package-path ios/PhononTTS
+      # The root Package.swift, the package Swift Package Manager reads from a release tag, is
+      # generated from ios/PhononTTS/Package.swift and pins the last release's framework. Only
+      # its manifest is checked here: main's sources can need a newer framework than that.
+      - name: Root Swift manifest
+        run: |
+          python3 scripts/package-swift.py check
+          swift package dump-package > /dev/null
 
   # One job to require in branch protection, instead of every matrix leg by name.
   ci-ok:

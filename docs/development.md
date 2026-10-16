@@ -90,7 +90,7 @@ cargo run --release -p ptts --example export_coreml --features hub -- phonon-cor
 
 Without `--model` it exports the default model; `--model "$MODEL_DIR"` exports a local checkpoint. Add `ios/PhononTTS` to Xcode as a local package, select the `ptts` product, and add the exported `phonon-coreml` folder as a folder reference named `Models`. The module remains `PhononTTS`. Export conditions must match the checkpoint. [Swift guide](../ios/PhononTTS/README.md).
 
-For ordinary app integration, the [published Swift archives](https://github.com/gradium-ai/xn-ptts/releases) include a package that downloads the compiled core. Custom checkpoint exports remain available.
+For ordinary app integration, apps add the repository itself as a package: the root `Package.swift` at each release tag downloads that release's compiled core. Custom checkpoint exports remain available. Build against local changes with `ios/PhononTTS`, not the root package, which always fetches a released framework.
 
 ## Docker
 
@@ -129,6 +129,19 @@ node --test ptts-wasm/js/test/*.test.mjs
 Do not use `--all-features`: CUDA requires its own SDK. The servers require libopus, and the HTTP server also uses LAME; their guides list the system packages. Release workflows set explicit CPU baselines rather than the checkout's `target-cpu=native` flags.
 
 Installed wheel tests run without weights by default. Supply `PTTS_TEST_MODEL` and, for a Hub model, `PTTS_TEST_REVISION` to include the marked checkpoint tests. Keep private model files and credentials out of public artifacts and shared caches.
+
+## Releasing the Swift package
+
+Swift Package Manager and the [Swift Package Index](https://swiftpackageindex.com) read the root `Package.swift` from a release tag. That manifest must already name the release's framework URL and its exact checksum when the tag is pushed. Two builds of the same commit do not give the same archive, so the framework is built once, on `main`, and the tag reuses it:
+
+1. Merge the version bump to `main`. The native packages workflow runs on that push and builds the framework. Wait for it to succeed.
+2. With `gh` signed in, run `python3 scripts/package-swift.py pin` on an up-to-date `main`. It finds that run, downloads its framework and writes the root `Package.swift` with the new version's URL and checksum.
+3. Commit only `Package.swift` and land it on `main`.
+4. Tag that commit `v<version>` and push the tag.
+5. The tag run does not rebuild the framework. It downloads the pinned one from the main run that built the same inputs, checks its checksum, and attaches it to the draft release with the rest.
+6. Publish the release. The framework URL works only from then on, so publish promptly: the Swift Package Index builds new tags soon after they appear. If its build ran before the release was public, start it again from the package's page on the index.
+
+If the tag is pushed before step 2, the tag run fails and says so. The root `Package.swift` is generated from `ios/PhononTTS/Package.swift`: after changing that file, run `python3 scripts/package-swift.py check --write`. CI fails while they disagree.
 
 ## Updating the Homebrew formula
 

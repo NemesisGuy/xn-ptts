@@ -23,15 +23,29 @@ several times slower than a device.
 
 Keep `tts` and `player` in your app or view state while speech is playing. `play` returns when generation finishes; releasing the player stops any audio still scheduled.
 
-## Prepared release package
+## Released package
 
-The Swift package is named `ptts`; its module remains `PhononTTS`. Existing consumers selecting `.product(name: "PhononTTS", package: ...)` must select `ptts` as the product name; their `import PhononTTS` stays the same. The release workflow produces `ptts-swift-<version>.zip`, a package with a versioned framework URL and its exact checksum, plus `PhononCore.xcframework.zip`. Neither contains model weights.
+The Swift package is named `ptts`; its module remains `PhononTTS`. Existing consumers selecting `.product(name: "PhononTTS", package: ...)` must select `ptts` as the product name; their `import PhononTTS` stays the same. Neither way below needs Rust, and neither contains model weights.
 
-Once those assets are published on the matching [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases), download and extract the Swift package ZIP and add that folder to Xcode as a local package. Select the `ptts` library product. Swift Package Manager downloads the matching compiled core automatically. Rust and the repository checkout are not needed.
+**From the repository.** In Xcode, choose *File, Add Package Dependencies*, enter `https://github.com/gradium-ai/xn-ptts.git`, choose a release version and add the `ptts` library to your app target. In a `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/gradium-ai/xn-ptts.git", from: "<version>"),
+],
+// and in your target:
+dependencies: [.product(name: "ptts", package: "xn-ptts")],
+```
+
+Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum. Releases up to 0.4.0-rc.2 came before it: use the archive below for those.
+
+For a pre-release such as `0.4.0-rc.3`, use `exact: "0.4.0-rc.3"`: a `from:` range skips pre-release versions.
+
+**From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
 You still need a prepared Core ML model bundle supplied with the selected checkpoint. If you already received one from us, use it directly with the release package and skip the model export below. No public HF repo or token is needed. If you received only a raw checkpoint, export it first. You can download a hosted Core ML bundle with `PhononModels.download(from:progress:)` or bundle it with the app as described below. Prepared public model bundles will be supplied when the model is released.
 
-Before publication, source development uses the local framework built by `ios/build-xcframework.sh`. For the eventual repository-based Swift package, commit the generated release manifest at the package root after its framework asset is available. Verify its URL and checksum from a clean consumer before advertising that installation path.
+Source development uses this folder's `Package.swift` and the local framework built by `ios/build-xcframework.sh`. The root `Package.swift` always fetches a released framework, so on `main` it can lag behind these sources.
 
 ## 1. Build the two pieces that are not in the source
 

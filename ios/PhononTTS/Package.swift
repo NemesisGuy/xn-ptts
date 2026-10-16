@@ -10,8 +10,9 @@ let package = Package(
         .library(name: "ptts", targets: ["PhononTTS"]),
     ],
     targets: [
-        // Source builds use the local compiled core. Release packaging replaces this target
-        // with its versioned download URL and the checksum of that exact archive.
+        // Source builds use the local compiled core. The release package and the root
+        // Package.swift replace this target with the release's download URL and the checksum of
+        // that exact archive (scripts/package-swift.py).
         .binaryTarget(name: "PhononCore", path: "PhononCore.xcframework"),
         .target(
             name: "PhononTTS",

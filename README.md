@@ -72,7 +72,7 @@ Each goal links to its quickstart below.
 | [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | `ptts-swift-<version>.zip` and its matching compiled framework. Needs a prepared Core ML bundle. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a prepared Core ML bundle. [Swift guide](ios/PhononTTS/README.md). |
 | [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
@@ -240,7 +240,7 @@ The first load downloads and caches the files. `onProgress` reports download pro
 <details>
 <summary>Show Swift quickstart</summary>
 
-Extract `ptts-swift-<version>.zip`, add the folder to Xcode as a local package, and select the **`ptts`** library product. Swift Package Manager downloads the matching compiled framework. This path needs no Rust build.
+In Xcode, choose *File, Add Package Dependencies*, enter `https://github.com/gradium-ai/xn-ptts.git`, and select the **`ptts`** library product. Swift Package Manager downloads the matching compiled framework. This path needs no Rust build. Releases up to 0.4.0-rc.2 instead ship the package as `ptts-swift-<version>.zip`: extract it and add the folder as a local package.
 
 Add the prepared Core ML model bundle to your app as a folder reference named `Models`:
 
