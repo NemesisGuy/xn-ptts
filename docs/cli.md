@@ -41,7 +41,7 @@ On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](
 brew install gradium-ai/tap/ptts
 ```
 
-Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.2` runtime preview and pins each release archive by SHA-256. It does not include a model: `ptts` downloads the default model on first use, or loads the one `--model` names.
+Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.3` runtime preview and pins each release archive by SHA-256. It does not include a model: `ptts` downloads the default model on first use, or loads the one `--model` names.
 
 After a new formula version is published, run `brew update` and `brew upgrade gradium-ai/tap/ptts`. The platform and CPU requirements above still apply.
 
