@@ -24,6 +24,7 @@ __all__ = [
     "available_devices",
     "available_quants",
     "build_info",
+    "catalog_voices",
     "get_num_threads",
     "set_num_threads",
 ]
@@ -45,8 +46,10 @@ class TTS:
     means: numbers, currency, dashed-digits, emails, urls, abbreviations, elongations), `"all"`
     (those and phones, times, dates), `"none"`, or a comma-separated list of rule names.
 
-    `voice_catalog` is a local JSONL file whose voices are registered beside the checkpoint's,
-    one `{"name", "filename"}` object per line with `filename` relative to the catalog.
+    `voice_catalog` is where a voice the checkpoint does not have is looked up: a Hugging Face
+    repo as `"hf://owner/name[@revision]"`, or a local `voices.jsonl` or folder holding one.
+    A voice is matched by name, in any case and with or
+    without accents, or by its catalog `voice_id`, and only the voices used are downloaded.
     """
 
     def __init__(
@@ -73,7 +76,7 @@ class TTS:
 
     @property
     def voices(self) -> list[str]:
-        """Names of the registered voices, sorted."""
+        """Names of the registered voices, sorted. Catalog voices join them once used."""
 
     @property
     def languages(self) -> list[str]:
@@ -214,3 +217,10 @@ def available_quants() -> list[str]:
 
 def build_info() -> dict[str, Any]:
     """The runtime's build configuration, for bug reports."""
+
+def catalog_voices(catalog: str | PathLike[str]) -> list[dict[str, str | None]]:
+    """The voices of a catalog, as dicts of `name`, `voice_id`, `language` and `description`.
+
+    `catalog` is as for `TTS`'s `voice_catalog`. Only the catalog is downloaded, no voice and
+    no model.
+    """

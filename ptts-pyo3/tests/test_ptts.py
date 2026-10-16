@@ -178,6 +178,46 @@ def test_thread_count_round_trips():
     assert ptts.get_num_threads() == before
 
 
+# --- voice catalog ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def catalog(tmp_path: Path) -> Path:
+    (tmp_path / "voices.jsonl").write_text(
+        '{"filename": "voices/a1.safetensors", "name": "Kauã", "voice_id": "a1", "language": "pt"}\n'
+        '{"filename": "voices/b2.safetensors", "name": "Zoey", "locale": "en-us"}\n',
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_catalog_voices_lists_a_local_catalog(catalog):
+    for source in (catalog, catalog / "voices.jsonl", str(catalog)):
+        voices = ptts.catalog_voices(source)
+        assert [v["name"] for v in voices] == ["Kauã", "Zoey"]
+        assert voices[0] == {"name": "Kauã", "voice_id": "a1", "language": "pt", "description": None}
+
+
+def test_a_missing_catalog_is_a_lookup_error(tmp_path):
+    with pytest.raises(LookupError):
+        ptts.catalog_voices(tmp_path / "missing.jsonl")
+
+
+def test_list_voices_needs_no_lang_or_model(catalog, capsys):
+    from ptts.__main__ import main
+
+    assert main(["--list-voices", "--voice-catalog", str(catalog)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == ["Kauã\tpt\ta1\t-", "Zoey\t-\t-\t-"]
+
+
+def test_list_voices_needs_a_catalog():
+    from ptts.__main__ import main
+
+    with pytest.raises(SystemExit):
+        main(["--list-voices"])
+
+
 # --- errors ----------------------------------------------------------------------------------
 
 

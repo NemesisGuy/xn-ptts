@@ -17,6 +17,7 @@ from ._ptts import (
     available_devices,
     available_quants,
     build_info,
+    catalog_voices,
     get_num_threads,
     set_num_threads,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "available_devices",
     "available_quants",
     "build_info",
+    "catalog_voices",
     "get_num_threads",
     "set_num_threads",
 ]

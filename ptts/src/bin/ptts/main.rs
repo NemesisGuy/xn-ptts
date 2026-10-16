@@ -15,20 +15,22 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ptts::preprocess::{Normalize, Rules};
 use ptts::synth::{DeviceKind, Quant, SpeechOptions};
+use ptts::voice_catalog::VoiceCatalog;
 
 #[derive(Parser, Debug)]
 #[command(name = "ptts", version, about = "Generate speech with Phonon")]
 struct Args {
     /// Text to synthesize.
-    text: String,
+    #[arg(required_unless_present = "list_voices")]
+    text: Option<String>,
 
     /// Output WAV file path.
     #[arg(short, long, default_value = "out.wav")]
     output: std::path::PathBuf,
 
-    /// Voice: a bundled voice id, a path to a voice `.safetensors`, or a path to
-    /// a ~10s audio file to clone. Defaults to the checkpoint's `default` voice,
-    /// or its first bundled voice by name.
+    /// Voice: a voice of the checkpoint or of the voice catalog, by name or catalog voice ID, a
+    /// path to a voice `.safetensors`, or a path to a ~10s audio file to clone. Defaults to the
+    /// checkpoint's `default` voice, or its first bundled voice by name.
     #[arg(short, long)]
     voice: Option<String>,
 
@@ -49,10 +51,15 @@ struct Args {
     )]
     model: String,
 
-    /// JSONL voice catalog to register, one `{"name", "filename"}` object per line with
-    /// `filename` relative to the catalog. Its voices can then be picked with --voice.
+    /// Voice catalog to look --voice up in when the checkpoint has no voice of that name: a
+    /// Hugging Face repo as hf://owner/name[@revision], or a local JSONL file or folder holding
+    /// voices.jsonl. Only the voice that is used is downloaded.
     #[arg(long)]
-    voice_catalog: Option<std::path::PathBuf>,
+    voice_catalog: Option<String>,
+
+    /// List the voices of --voice-catalog, then exit.
+    #[arg(long, requires = "voice_catalog")]
+    list_voices: bool,
 
     /// Tokenizer to load, as a path to a `tokenizer.json`. Defaults to the one
     /// the checkpoint ships.
@@ -100,8 +107,8 @@ struct Args {
     /// Language the text is normalized as before tokenizing: `en`, `fr`, `de`, `es` or `pt`.
     /// Required: the spoken forms differ per language, so there is nothing safe to guess.
     /// `none` hands the text to the tokenizer as written, which the model reads less well.
-    #[arg(long)]
-    lang: String,
+    #[arg(long, required_unless_present = "list_voices")]
+    lang: Option<String>,
 
     /// Which word rewrites run on the normalized text: `default` (numbers, currency,
     /// dashed-digits, emails, urls, abbreviations, elongations), `all` (those and phones, times,
@@ -112,8 +119,27 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let catalog = args.voice_catalog.as_deref().map(VoiceCatalog::new).transpose()?;
+    if args.list_voices {
+        // clap requires --voice-catalog with --list-voices.
+        let catalog = catalog.as_ref().context("--list-voices needs --voice-catalog")?;
+        for voice in catalog.voices()? {
+            let field = |f: &Option<String>| f.clone().unwrap_or_else(|| "-".to_string());
+            println!(
+                "{}\t{}\t{}\t{}",
+                voice.name,
+                field(&voice.language),
+                field(&voice.voice_id),
+                field(&voice.description)
+            );
+        }
+        return Ok(());
+    }
+    // clap requires both unless --list-voices is given.
+    let text = args.text.as_deref().context("nothing to say")?;
+    let lang = args.lang.as_deref().context("--lang is required")?;
     // Parsed before anything is downloaded, so a bad --lang fails in milliseconds.
-    let normalize = args.lang.parse::<Normalize>()?.with_rules(args.rewrites.parse::<Rules>()?);
+    let normalize = lang.parse::<Normalize>()?.with_rules(args.rewrites.parse::<Rules>()?);
     if let Some(threads) = args.threads {
         // Must happen before the first tensor op, since it sets the size of rayon's global pool.
         xn::set_num_threads(threads);
@@ -131,10 +157,7 @@ fn main() -> Result<()> {
     let device = args.device.parse::<DeviceKind>()?;
     quant.check_device(device)?;
     let options = model_helpers::ResolveOptions { quant, weights: args.weights.as_deref() };
-    let mut checkpoint = model_helpers::Checkpoint::locate(&args.model, options)?;
-    if let Some(catalog) = args.voice_catalog.as_deref() {
-        checkpoint.add_voice_catalog(catalog)?;
-    }
+    let checkpoint = model_helpers::Checkpoint::locate(&args.model, options)?;
     let mut builder =
         checkpoint.builder(normalize).device(device).temperature(args.temperature).seed(args.seed);
     if let Some(tokenizer) = args.tokenizer.as_deref() {
@@ -162,7 +185,18 @@ fn main() -> Result<()> {
     let mut opts = SpeechOptions::default();
     match &voice {
         VoiceArg::Default => {}
-        VoiceArg::Bundled(name) => opts = opts.voice(name.clone()),
+        VoiceArg::Bundled(name) => match &catalog {
+            None => opts = opts.voice(name.clone()),
+            Some(catalog) => {
+                let name = catalog.register(&mut tts, name)?;
+                anyhow::ensure!(
+                    tts.voices().contains(&name),
+                    "no voice '{name}': the model has {}, and --list-voices lists the catalog's",
+                    tts.voices().join(", ")
+                );
+                opts = opts.voice(name);
+            }
+        },
         VoiceArg::Embedding(_) => opts = opts.voice(VoiceArg::REGISTERED),
         VoiceArg::Audio(path) => {
             let pcm = ptts::audio::load_mono_at(path, tts.voice_prompt_sample_rate())?;
@@ -172,7 +206,6 @@ fn main() -> Result<()> {
     }
 
     // `Synth` normalizes the text itself; log what it will see.
-    let text = args.text.as_str();
     if normalize != Normalize::OFF {
         tracing::info!(
             lang = normalize.as_str(),
@@ -222,7 +255,7 @@ fn main() -> Result<()> {
 enum VoiceArg {
     /// Not given: use whichever voice the model defaults to.
     Default,
-    /// A voice id shipped with the checkpoint, e.g. `alba`.
+    /// A voice of the checkpoint or the catalog, e.g. `alba`.
     Bundled(String),
     /// A precomputed voice embedding, e.g. from the `create_voice` example.
     Embedding(std::path::PathBuf),
@@ -285,6 +318,17 @@ mod tests {
     fn without_a_model_the_default_loads() {
         let args = Args::try_parse_from(["ptts", "--lang", "en", "hello"]).unwrap();
         assert_eq!(args.model, model_helpers::DEFAULT_MODEL);
+    }
+
+    #[test]
+    fn list_voices_needs_no_text_or_lang() {
+        let args = Args::try_parse_from(["ptts", "--list-voices", "--voice-catalog", "c"]).unwrap();
+        assert!(args.list_voices);
+        assert_eq!(args.voice_catalog.as_deref(), Some("c"));
+        // There is no catalog to list without one.
+        assert!(Args::try_parse_from(["ptts", "--list-voices"]).is_err());
+        assert!(Args::try_parse_from(["ptts", "hello"]).is_err());
+        assert!(Args::try_parse_from(["ptts", "--lang", "en"]).is_err());
     }
 
     #[test]

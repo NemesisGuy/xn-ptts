@@ -303,19 +303,9 @@ impl Lang {
     /// The letter `c` folds to, when the tokenizer of the checkpoints for this language has no
     /// piece for it. A new language must check its own letters against this table.
     fn fold(self, c: char) -> Option<char> {
-        let folds = match self {
-            Lang::En | Lang::Fr | Lang::De | Lang::Es | Lang::Pt => FOLDS,
-        };
-        if (c as u32) < 0xCC {
-            return None;
+        match self {
+            Lang::En | Lang::Fr | Lang::De | Lang::Es | Lang::Pt => unaccented(c),
         }
-        let mut it = folds.chars();
-        while let (Some(a), Some(b)) = (it.next(), it.next()) {
-            if a == c {
-                return Some(b);
-            }
-        }
-        None
     }
 
     pub fn decimal_separator(self) -> &'static str {
@@ -488,6 +478,20 @@ impl StringAppender {
 /// Letters with a diacritic the tokenizer has no piece for, which it would otherwise hand the
 /// model as raw bytes, paired with the letter they fold to.
 const FOLDS: &str = "ÌIÒOÝYìiòoýyÿyĀAāaĂAăaĄAąaĆCćcĈCĉcĊCċcČCčcĎDďdĒEēeĔEĕeĖEėeĘEęeĚEěeĜGĝgĞGğgĠGġgĢGģgĤHĥhĨIĩiĪIīiĬIĭiĮIįiİIĴJĵjĶKķkĹLĺlĻLļlĽLľlŃNńnŅNņnŇNňnŌOōoŎOŏoŐOőoŔRŕrŖRŗrŘRřrŚSśsŜSŝsŞSşsŠSšsŢTţtŤTťtŨUũuŪUūuŬUŭuŮUůuŰUűuŲUųuŴWŵwŶYŷyŸYŹZźzŻZżzŽZžzƠOơoƯUưuǍAǎaǏIǐiǑOǒoǓUǔuǕUǖuǗUǘuǙUǚuǛUǜuǞAǟaǠAǡaǦGǧgǨKǩkǪOǫoǬOǭoǰjǴGǵgǸNǹnǺAǻaȀAȁaȂAȃaȄEȅeȆEȇeȈIȉiȊIȋiȌOȍoȎOȏoȐRȑrȒRȓrȔUȕuȖUȗuȘSșsȚTțtȞHȟhȦAȧaȨEȩeȪOȫoȬOȭoȮOȯoȰOȱoȲYȳyḀAḁaḂBḃbḄBḅbḆBḇbḈCḉcḊDḋdḌDḍdḎDḏdḐDḑdḒDḓdḔEḕeḖEḗeḘEḙeḚEḛeḜEḝeḞFḟfḠGḡgḢHḣhḤHḥhḦHḧhḨHḩhḪHḫhḬIḭiḮIḯiḰKḱkḲKḳkḴKḵkḶLḷlḸLḹlḺLḻlḼLḽlḾMḿmṀMṁmṂMṃmṄNṅnṆNṇnṈNṉnṊNṋnṌOṍoṎOṏoṐOṑoṒOṓoṔPṕpṖPṗpṘRṙrṚRṛrṜRṝrṞRṟrṠSṡsṢSṣsṤSṥsṦSṧsṨSṩsṪTṫtṬTṭtṮTṯtṰTṱtṲUṳuṴUṵuṶUṷuṸUṹuṺUṻuṼVṽvṾVṿvẀWẁwẂWẃwẄWẅwẆWẇwẈWẉwẊXẋxẌXẍxẎYẏyẐZẑzẒZẓzẔZẕzẖhẗtẘwẙyẠAạaẢAảaẤAấaẦAầaẨAẩaẪAẫaẬAậaẮAắaẰAằaẲAẳaẴAẵaẶAặaẸEẹeẺEẻeẼEẽeẾEếeỀEềeỂEểeỄEễeỆEệeỈIỉiỊIịiỌOọoỎOỏoỐOốoỒOồoỔOổoỖOỗoỘOộoỚOớoỜOờoỞOởoỠOỡoỢOợoỤUụuỦUủuỨUứuỪUừuỬUửuỮUữuỰUựuỲYỳyỴYỵyỶYỷyỸYỹy";
+
+/// The letter `c` folds to in [`FOLDS`], if it has a diacritic listed there.
+pub(crate) fn unaccented(c: char) -> Option<char> {
+    if (c as u32) < 0xCC {
+        return None;
+    }
+    let mut it = FOLDS.chars();
+    while let (Some(a), Some(b)) = (it.next(), it.next()) {
+        if a == c {
+            return Some(b);
+        }
+    }
+    None
+}
 
 fn subscript(c: char) -> Option<char> {
     Some(match c {
