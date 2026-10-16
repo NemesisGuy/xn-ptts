@@ -61,6 +61,19 @@ pub(crate) fn resolve(source: &HubSource, _: ResolveOptions<'_>) -> Result<Check
     )))
 }
 
+#[cfg(not(feature = "hub"))]
+pub(crate) fn download(source: &HubSource, _: &str) -> Result<std::path::PathBuf> {
+    Err(Error::Unsupported(format!(
+        "cannot download {source}: ptts was built without the `hub` feature"
+    )))
+}
+
+/// Download one file of `source`, or find it in the cache.
+#[cfg(feature = "hub")]
+pub(crate) fn download(source: &HubSource, filename: &str) -> Result<std::path::PathBuf> {
+    Repo::open(source)?.get(filename)
+}
+
 /// The client reads `HF_TOKEN`, `HF_ENDPOINT` and the cache location from the environment,
 /// falling back to the token `hf auth login` stores.
 #[cfg(feature = "hub")]

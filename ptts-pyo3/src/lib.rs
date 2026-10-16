@@ -19,6 +19,7 @@ use numpy::{PyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
 use ptts::checkpoint::{Checkpoint, ResolveOptions};
 use ptts::preprocess::{Normalize, Rules};
 use ptts::synth::{DeviceKind, Quant, SpeechOptions, SpeechStream, Synth};
+use ptts::voice_catalog::VoiceCatalog;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
@@ -80,6 +81,8 @@ struct Tts {
     /// Voice for calls that name none. `SynthBuilder` picks its own during
     /// `build()`, which is before the voices below are registered.
     default_voice: Option<String>,
+    /// Where a voice the checkpoint does not have is looked up, and downloaded on first use.
+    catalog: Option<Arc<VoiceCatalog>>,
 }
 
 #[pymethods]
@@ -103,9 +106,10 @@ impl Tts {
     /// emails, urls, abbreviations, elongations), `"all"` (those and phones,
     /// times, dates), `"none"`, or a comma-separated list of rule names.
     ///
-    /// `voice_catalog` is a local JSONL file whose voices are registered
-    /// beside the checkpoint's, one `{"name", "filename"}` object per line
-    /// with `filename` relative to the catalog.
+    /// `voice_catalog` is where a voice the checkpoint does not have is looked
+    /// up: a Hugging Face repo as `"hf://owner/name[@revision]"`, or a local
+    /// `voices.jsonl` or folder holding one. A voice is matched by name, in any case and with or without accents, or
+    /// by its catalog `voice_id`, and only the voices used are downloaded.
     #[new]
     #[pyo3(signature = (
         model = None,
@@ -192,10 +196,11 @@ impl Tts {
         // Loading reads hundreds of megabytes and runs no Python.
         py.detach(move || {
             let options = ResolveOptions { quant, weights: None };
-            let mut artifacts = Checkpoint::locate(&model, options).py()?;
-            if let Some(catalog) = voice_catalog {
-                artifacts.add_voice_catalog(catalog).py()?;
-            }
+            let artifacts = Checkpoint::locate(&model, options).py()?;
+            let catalog = voice_catalog
+                .map(|path| VoiceCatalog::new(&path.to_string_lossy()).map(Arc::new))
+                .transpose()
+                .py()?;
             let mut builder = artifacts
                 .builder(normalize)
                 .device(device)
@@ -213,15 +218,11 @@ impl Tts {
             }
             let mut synth = builder.build().py()?;
             artifacts.register_voices(&mut synth);
-            if let Some(name) = voice.as_deref()
-                && !synth.voices().iter().any(|v| v == name)
-            {
-                return Err(to_py_err(ptts::Error::UnknownVoice {
-                    name: name.to_string(),
-                    known: synth.voices(),
-                }));
-            }
-            Ok(Self { inner: Arc::new(Mutex::new(synth)), default_voice: voice })
+            let voice = match voice {
+                Some(name) => Some(known_voice(catalog.as_deref(), &mut synth, &name)?),
+                None => None,
+            };
+            Ok(Self { inner: Arc::new(Mutex::new(synth)), default_voice: voice, catalog })
         })
     }
 
@@ -231,7 +232,7 @@ impl Tts {
         Ok(self.lock()?.sample_rate())
     }
 
-    /// Names of the registered voices, sorted.
+    /// Names of the registered voices, sorted. Catalog voices join them once used.
     #[getter]
     fn voices(&self) -> PyResult<Vec<String>> {
         Ok(self.lock()?.voices())
@@ -428,12 +429,55 @@ impl Tts {
     /// against any other Python thread calling in.
     fn start(&self, py: Python<'_>, text: &str, opts: &SpeechOptions) -> PyResult<SpeechStream> {
         let inner = Arc::clone(&self.inner);
-        let opts = opts.clone();
+        let catalog = self.catalog.clone();
+        let mut opts = opts.clone();
         py.detach(move || {
-            let synth = inner.lock().map_err(|_| poisoned())?;
+            let mut synth = inner.lock().map_err(|_| poisoned())?;
+            if let Some(name) = opts.voice.take() {
+                opts.voice = Some(known_voice(catalog.as_deref(), &mut synth, &name)?);
+            }
             synth.stream_with(text, &opts).py()
         })
     }
+}
+
+/// The registered name of the voice `name` asks for, fetching it from `catalog` if there is
+/// one and the checkpoint does not have it.
+fn known_voice(catalog: Option<&VoiceCatalog>, synth: &mut Synth, name: &str) -> PyResult<String> {
+    let name = match catalog {
+        Some(catalog) => catalog.register(synth, name).py()?,
+        None => name.to_string(),
+    };
+    if !synth.voices().contains(&name) {
+        return Err(to_py_err(ptts::Error::UnknownVoice { name, known: synth.voices() }));
+    }
+    Ok(name)
+}
+
+/// The voices of a catalog, as dicts of `name`, `voice_id`, `language` and `description`.
+/// `catalog` is as for `TTS`'s `voice_catalog`. Only the catalog is downloaded, no voice and
+/// no model.
+#[pyfunction]
+fn catalog_voices(
+    py: Python<'_>,
+    catalog: std::path::PathBuf,
+) -> PyResult<Vec<HashMap<&'static str, Option<String>>>> {
+    py.detach(move || {
+        let catalog = VoiceCatalog::new(&catalog.to_string_lossy()).py()?;
+        Ok(catalog
+            .voices()
+            .py()?
+            .iter()
+            .map(|v| {
+                HashMap::from([
+                    ("name", Some(v.name.clone())),
+                    ("voice_id", v.voice_id.clone()),
+                    ("language", v.language.clone()),
+                    ("description", v.description.clone()),
+                ])
+            })
+            .collect())
+    })
 }
 
 /// A panic inside a `&mut self` method would leave the model half-updated, so a
@@ -575,6 +619,7 @@ fn ptts_(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(available_devices, m)?)?;
     m.add_function(wrap_pyfunction!(available_quants, m)?)?;
     m.add_function(wrap_pyfunction!(build_info, m)?)?;
+    m.add_function(wrap_pyfunction!(catalog_voices, m)?)?;
     Ok(())
 }
 

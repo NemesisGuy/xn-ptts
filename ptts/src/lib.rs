@@ -34,6 +34,7 @@
 //! |---|---|
 //! | [`synth`] | The one-call API: load, prime, generate, decode. Start here. |
 //! | [`checkpoint`] | Resolving a model: a local directory, an `hf://` repo, or the default. |
+//! | [`voice_catalog`] | Voices listed in a catalog, downloaded when first used. |
 //! | [`loader`] | Reading weights and voice files, and the checkpoint key mapping. |
 //! | [`error`] | [`Error`], what those two return. |
 //! | [`plan`] | Frame and KV budgets, the end-of-speech policy. |
@@ -109,6 +110,8 @@ pub mod tok;
 pub mod transformer;
 pub mod tts_model;
 pub mod utils;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod voice_catalog;
 pub mod wav;
 
 pub use error::{Error, Result};
