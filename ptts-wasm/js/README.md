@@ -38,7 +38,7 @@ for await (const pcm of tts.stream('A longer piece of text. It is split at sente
 }
 ```
 
-Long text is grouped into sentence-aligned chunks and spoken one after another. The usual target is 50 text tokens per chunk; a longer single sentence is split at up to 200 tokens. An indivisible piece over 200 tokens returns an input error before generation.
+Long text is grouped into sentence-aligned chunks and spoken one after another. The usual target is 50 text tokens per chunk; a longer single sentence is split at up to 200 tokens, cutting even a single word over the limit between its characters.
 
 To stop, break out of the loop, call `stream.cancel()`, or pass an `AbortSignal`:
 
