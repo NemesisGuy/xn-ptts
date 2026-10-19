@@ -181,7 +181,7 @@ impl Lang {
         }
     }
 
-    /// The word "n°" abbreviates, as in "le n°5".
+    /// The word "n°" abbreviates, as in "le n°5" or "el n.º 5".
     fn number_sign(self) -> &'static str {
         match self {
             Lang::En => "number",
@@ -456,11 +456,13 @@ impl StringAppender {
                 .is_some_and(|i| b[i].is_ascii_digit() || b[i] == '.' || b[i] == ',')
     }
 
-    /// Whether the text ends with an "n" or "N" that is a word of its own: before a `°`, it is
-    /// the number sign "n°" rather than "n degrees".
+    /// Whether the text ends with an "n" or "N" that is a word of its own, with or without a
+    /// period: before a `°` or the ordinal sign `º`, it is the number sign, written "n°" in
+    /// French and "n.º" or "nº" in Spanish and Portuguese, rather than "n degrees".
     fn ends_with_n(&self) -> bool {
-        matches!(self.buffer.last(), Some('n' | 'N'))
-            && !self.buffer.len().checked_sub(2).is_some_and(|i| self.buffer[i].is_alphanumeric())
+        let b = self.buffer.strip_suffix(&['.']).unwrap_or(&self.buffer);
+        matches!(b.last(), Some('n' | 'N'))
+            && !b.len().checked_sub(2).is_some_and(|i| b[i].is_alphanumeric())
     }
 
     /// `word` as a word of its own, for a symbol read aloud.
@@ -647,8 +649,9 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
                 let of = (empty > 0).then_some(full + empty + usize::from(half));
                 res.push_spoken(&lang.stars(&n, of));
             }
-            '°' if res.ends_with_n() => {
+            '°' | 'º' if res.ends_with_n() => {
                 let word = lang.number_sign();
+                res.buffer.pop_if(|c| *c == '.');
                 if res.buffer.pop() == Some('N') {
                     res.push_spoken(&format!("{}{}", word[..1].to_uppercase(), &word[1..]));
                 } else {
@@ -974,6 +977,11 @@ mod tests {
             normalize_text("Turn 90°, then 10n°.", Lang::En, Rules::DEFAULT),
             "Turn 90 degrees, then 10n degrees."
         );
+        assert_eq!(
+            normalize_text("El n.º 5, el nº 6, el n.° 7 y la N.º 8.", Lang::Es, Rules::DEFAULT),
+            "El número 5, el número 6, el número 7 y la Número 8."
+        );
+        assert_eq!(normalize_text("Casa nº3.", Lang::Pt, Rules::DEFAULT), "Casa número 3.");
         assert_eq!(
             normalize_text("Es ist Haus n°3.", Lang::De, Rules::DEFAULT),
             "Es ist Haus Nummer 3."
