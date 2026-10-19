@@ -465,6 +465,13 @@ impl StringAppender {
             && !b.len().checked_sub(2).is_some_and(|i| b[i].is_alphanumeric())
     }
 
+    /// Whether the text ends with a digit and then whitespace, as before the `€` of "250 €".
+    fn ends_with_spaced_digit(&self) -> bool {
+        let b = &self.buffer;
+        self.last_is_whitespace()
+            && b.iter().rev().find(|c| !c.is_whitespace()).is_some_and(char::is_ascii_digit)
+    }
+
     /// `word` as a word of its own, for a symbol read aloud.
     fn push_spoken(&mut self, word: &str) {
         self.push_whitespace();
@@ -706,6 +713,16 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
             '–' | '*' | '—' | '[' | ']' | '{' | '}' => res.push_whitespace(),
             '•' | '‣' | '◦' | '·' | '→' | '←' | '↑' | '↓' | '➡' | '➜' => {
                 res.push_whitespace();
+            }
+            // "250 €", "42,00 €": the symbol after the number and a space, as French, German,
+            // Spanish and Portuguese write it, joins the number so the currency rule reads it.
+            // Not before a digit, where it leads the next amount instead.
+            c if rewrite::is_currency_symbol(c)
+                && res.ends_with_spaced_digit()
+                && !chars.peek().is_some_and(char::is_ascii_digit) =>
+            {
+                res.pop_whitespace();
+                res.push(c);
             }
             '…' => res.push('.'),
             '=' => res.push_spoken(lang.special_chars().equals),
@@ -996,8 +1013,23 @@ mod tests {
         );
         assert_eq!(
             normalize_text("Il a levé 2 € millions, ★★★☆☆.", Lang::Fr, Rules::DEFAULT),
-            "Il a levé 2 € millions, 3 étoiles sur 5."
+            "Il a levé 2 millions d'euros, 3 étoiles sur 5."
         );
+        // A symbol after the number and a space, plain or non-breaking, reads as one without.
+        let spaced = [
+            (Lang::Fr, "Ça coûte 250 €.", "Ça coûte 250 euros."),
+            (Lang::Fr, "Ça coûte 42,00\u{a0}€.", "Ça coûte 42 euros."),
+            (Lang::Fr, "Ça coûte 0,07\u{202f}$.", "Ça coûte 7 cents."),
+            (Lang::Fr, "Ça coûte 4,59 €.", "Ça coûte 4 euros et 59 centimes."),
+            (Lang::De, "Es kostet 250 €.", "Es kostet 250 Euro."),
+            (Lang::Es, "Cuesta 250 €.", "Cuesta 250 euros."),
+            (Lang::Pt, "Custa 30 ¢.", "Custa 30 centavos."),
+            (Lang::En, "From 10 $20 bills.", "From 10 20 dollars bills."),
+            (Lang::Fr, "Le prix en €.", "Le prix en €."),
+        ];
+        for (lang, input, expected) in spaced {
+            assert_eq!(normalize_text(input, lang, Rules::DEFAULT), expected, "{input:?}");
+        }
         assert_eq!(
             normalize_text("Sie zahlte $2 Millionen.", Lang::De, Rules::DEFAULT),
             "Sie zahlte 2 Millionen Dollar."
