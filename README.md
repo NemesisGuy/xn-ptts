@@ -2,7 +2,10 @@
 
 **Streaming speech, on your device.**
 
-Phonon brings natural text-to-speech to phones, laptops, browsers, and local services. It is built for offline assistants, accessibility tools, and interactive experiences that need speech without a cloud round trip. The runtime is written in Rust and needs no PyTorch.
+Phonon brings natural text-to-speech to phones, laptops, browsers, and local
+services. It is built for offline assistants, accessibility tools, and
+interactive experiences that need speech without a cloud round trip. The runtime
+is written in Rust and needs no PyTorch.
 
 [![Rust CI](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml)
 [![Python wheels](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml)
@@ -22,7 +25,13 @@ Phonon brings natural text-to-speech to phones, laptops, browsers, and local ser
 
 [Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
 
-> **Runtime preview available:** Python, Rust, browser packages, and native downloads are published. See the [runtime preview release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) for installation instructions. The unversioned registry commands below target the upcoming stable release and currently select older packages. Phonon model files are available separately from the runtime packages. Docker public access is being finalized.
+> **Runtime preview available:** Python, Rust, browser packages, and native
+> downloads are published. See the [runtime preview
+> release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) for
+> installation instructions. The unversioned registry commands below target the
+> upcoming stable release and currently select older packages. Phonon model
+> files are available separately from the runtime packages. Docker public access
+> is being finalized.
 
 ## Try it
 
@@ -32,36 +41,49 @@ With [uv](https://docs.astral.sh/uv/), one line writes a WAV:
 uvx ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
-The first run downloads the default model and caches it. To run the runtime preview now, use `uvx --prerelease allow ptts`. See [Model setup](#model-setup) to use another model.
+The first run downloads the default model and caches it. To run the runtime
+preview now, use `uvx --prerelease allow ptts`. See [Model setup](#model-setup)
+to use another model.
 
 ## What you get
 
-- **Small enough to ship:** Choose a 31M, 56M or 98M parameter model. Each can ship inside a mobile app or load in a browser tab.
-- **Five languages in one model:** Speak English, French, German, Spanish, and Portuguese, with more languages planned.
-- **Fast across devices:** A custom inference stack runs in browsers and on phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN preview for supported Snapdragon NPUs, and GPU support. Multiple backends deliver faster inference than Kokoro and llama.cpp-based runtimes on the same hardware.
-- **Voices ready to use or make your own:** Choose from ready-to-use voices, or design or clone your own and bring it to your device with [two scripts](#voices).
-- **Control the delivery:** Adjust speaking speed and start playing streamed audio before the full utterance is ready.
+- **Small enough to ship:** Choose a 31m, or 40m parameters model. Each can ship
+  inside a mobile app or load in a browser tab.
+- **Five languages in one model:** Speak English, French, German, Spanish, and
+  Portuguese, with more languages planned.
+- **Fast across devices:** A custom inference stack runs in browsers and on
+  phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN
+  preview for supported Snapdragon NPUs, and GPU support. Multiple backends
+  deliver faster inference than Kokoro and llama.cpp-based runtimes on the same
+  hardware.
+- **Voices ready to use or make your own:** Choose from ready-to-use voices, or
+  design or clone your own and bring it to your device with [two
+  scripts](#voices).
+- **Control the delivery:** Adjust speaking speed and start playing streamed
+  audio before the full utterance is ready.
 
 ## Performance
 
-Three model sizes, one inference stack. Each cell is how many seconds of audio Phonon makes per
+Two model sizes, one inference stack. Each cell is how many seconds of audio Phonon makes per
 second of compute (higher is faster; above 1x is faster than real time) and the time to first
-byte (TTFB). CPU rows use a single core; the Metal and Neural Engine rows run on the accelerator.
+byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs on the accelerator.
 
-| Device | 31M | 56M | 98M |
-|---|---|---|---|
-| MacBook Air M5, CPU, 1 core | 26x · 5 ms | 22x · 6 ms | 17x · 11 ms |
-| MacBook Air M5, Metal GPU | 29x · 4 ms | 25x · 5 ms | 20x · 10 ms |
-| iPhone 16 Pro, Neural Engine | 22x · 9 ms | 19x · 13 ms | 15x · 17 ms |
-| Raspberry Pi 5, CPU, 1 core | 2.3x · 68 ms | 2.2x · 92 ms | 1.8x · 191 ms |
+| Device | 31m | 40m |
+|---|---|---|
+| MacBook Air M5, CPU + KleidiAI, 1 core | 26x · 5 ms | 20x · 7 ms |
+| MacBook Air M5, CPU + KleidiAI, 4 cores | 41x · 6 ms | 39x · 8 ms |
+| iPhone 16 Pro, Neural Engine | 22x · 9 ms | 20x · 12 ms |
+| Raspberry Pi 5, CPU, 1 core | 2.3x · 68 ms | 2.2x · 88 ms |
 
-- Every size runs faster than real time on a single CPU core, from a MacBook to a Raspberry Pi 5.
+- Every size runs faster than real time on a single CPU core, from a MacBook to
+  a Raspberry Pi 5.
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
-- On one MacBook Air core, the 56M model runs at 22x real time with a 6 ms TTFB. Kokoro (82M), run
-  through its own PyTorch package on the same core, runs at 7.3x with a 776 ms TTFB. Kokoro does not
-  stream: it makes the whole sentence before returning any audio, so its TTFB is the time for the
-  full sentence. Streaming frame by frame is what keeps Phonon's TTFB in milliseconds.
+- On one MacBook Air core, the 40M model runs at 20x real time with a 7 ms TTFB.
+  Kokoro (82M), run through its own PyTorch package on the same core, runs at
+  7.3x with a 776 ms TTFB. Kokoro does not stream: it makes the whole sentence
+  before returning any audio, so its TTFB is the time for the full sentence.
+  Streaming frame by frame is what keeps Phonon's TTFB in milliseconds.
 
 ## Choose an integration
 
@@ -103,7 +125,11 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 
 ## Voices
 
-Each checkpoint comes with its own voices. You can also design a voice from a text description in [Gradium Studio](https://studio.gradium.ai/), or clone one from a short recording. Two scripts download these voices as voice files. They need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can create in Gradium Studio. The voice files work with every Phonon checkpoint.
+Each checkpoint comes with its own voices. You can also design a voice from a
+text description in [Gradium Studio](https://studio.gradium.ai/), or clone one
+from a short recording. Two scripts download these voices as voice files. They
+need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can
+create in Gradium Studio. The voice files work with every Phonon checkpoint.
 
 ```sh
 export GRADIUM_API_KEY=...
@@ -124,7 +150,10 @@ To use a voice by name in Python and the servers too, save it in the checkpoint 
 
 ## Quickstart
 
-These examples use the default model. The install commands below target the upcoming stable release; to install the runtime preview now, follow the [release instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) or the [source setup](docs/development.md).
+These examples use the default model. The install commands below target the
+upcoming stable release; to install the runtime preview now, follow the [release
+instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) or
+the [source setup](docs/development.md).
 
 ### Command line
 
@@ -139,13 +168,15 @@ uvx ptts --lang en "Hello from Phonon." -o speech.wav
 
 `uvx` manages the Python environment and dependencies.
 
-On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew tap. It currently installs the `0.4.0-rc.3` runtime preview:
+On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
+tap. It currently installs the `0.4.0-rc.3` runtime preview:
 
 ```sh
 brew install gradium-ai/tap/ptts
 ```
 
-You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your `PATH`. Neither path needs Python or Rust. Generate a WAV:
+You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your
+`PATH`. Neither path needs Python or Rust. Generate a WAV:
 
 ```sh
 ptts --lang en "Hello from Phonon." -o speech.wav
@@ -155,7 +186,8 @@ The output is a mono 24 kHz WAV. Open it in your audio player.
 
 If you prefer Cargo, install the command with `cargo install ptts --locked --features cli`.
 
-To use another model, pass a local folder or a Hugging Face repo, and `--quant q8` for faster q8 weights on the CPU:
+To use another model, pass a local folder or a Hugging Face repo, and `--quant
+q8` for faster q8 weights on the CPU:
 
 ```sh
 ptts --model hf://OWNER/MODEL@COMMIT_SHA --lang en --quant q8 \
@@ -227,11 +259,19 @@ const tts = await PhononTTS.load({ lang: 'en' });
 const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 ```
 
-`model` picks another one: a public Hugging Face repo as `'hf://OWNER/MODEL@COMMIT_SHA'`, or the URLs of files you serve with your app.
+`model` picks another one: a public Hugging Face repo as
+`'hf://OWNER/MODEL@COMMIT_SHA'`, or the URLs of files you serve with your app.
 
-Use the returned `Blob` for a download link or your audio player. `tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the [browser guide](ptts-wasm/js/README.md#streaming) includes a complete Web Audio example. Call `tts.dispose()` when finished with the model.
+Use the returned `Blob` for a download link or your audio player.
+`tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the
+[browser guide](ptts-wasm/js/README.md#streaming) includes a complete Web Audio
+example. Call `tts.dispose()` when finished with the model.
 
-The first load downloads and caches the files. `onProgress` reports download progress. Serve over HTTPS or localhost for caching, and use a browser with WebAssembly SIMD. The package runs in browsers, not Node.js. CPU is the default. Threading and WebGPU setup are covered in the [browser guide →](ptts-wasm/js/README.md).
+The first load downloads and caches the files. `onProgress` reports download
+progress. Serve over HTTPS or localhost for caching, and use a browser with
+WebAssembly SIMD. The package runs in browsers, not Node.js. CPU is the default.
+Threading and WebGPU setup are covered in the [browser guide
+→](ptts-wasm/js/README.md).
 
 </details>
 
@@ -240,7 +280,11 @@ The first load downloads and caches the files. `onProgress` reports download pro
 <details>
 <summary>Show Swift quickstart</summary>
 
-In Xcode, choose *File, Add Package Dependencies*, enter `https://github.com/gradium-ai/xn-ptts.git`, and select the **`ptts`** library product. Swift Package Manager downloads the matching compiled framework. This path needs no Rust build. Releases up to 0.4.0-rc.2 instead ship the package as `ptts-swift-<version>.zip`: extract it and add the folder as a local package.
+In Xcode, choose *File, Add Package Dependencies*, enter
+`https://github.com/gradium-ai/xn-ptts.git`, and select the **`ptts`** library
+product. Swift Package Manager downloads the matching compiled framework. This
+path needs no Rust build. Releases up to 0.4.0-rc.2 instead ship the package as
+`ptts-swift-<version>.zip`: extract it and add the folder as a local package.
 
 Add the prepared Core ML model bundle to your app as a folder reference named `Models`:
 
@@ -367,12 +411,22 @@ Report bugs or request integrations through [GitHub Issues](https://github.com/g
 
 ## Acknowledgements
 
-Phonon builds on [Pocket TTS](https://github.com/kyutai-labs/pocket-tts), developed by Kyutai, and uses the [xn](https://github.com/LaurentMazare/xn) Rust tensor runtime. Gradium's Phonon checkpoints are the primary target. Compatible Pocket TTS checkpoints use the same explicit loading interface when they supply their own config, tokenizer JSON, weights, and voices.
+Phonon builds on the ground-breaking work on Continuous Audio Languages Models
+developed by Kyutai. This line of work resulted in [Pocket
+TTS](https://github.com/kyutai-labs/pocket-tts) which Phonon builds heavily on.
+It uses the [xn](https://github.com/LaurentMazare/xn) Rust tensor runtime.
+Gradium's Phonon checkpoints are the primary target. Compatible Pocket TTS
+checkpoints use the same explicit loading interface when they supply their own
+config, tokenizer JSON, weights, and voices.
 
 ## License
 
-The code is **MIT OR Apache-2.0**, at your option: [MIT](LICENSE-MIT) · [Apache-2.0](LICENSE-APACHE).
+The code is **MIT OR Apache-2.0**, at your option: [MIT](LICENSE-MIT) ·
+[Apache-2.0](LICENSE-APACHE).
 
-Model weights and voices are distributed separately and have their own licenses. Check the model license before redistribution.
+Model weights and voices are distributed separately and have their own licenses.
+Check the model license before redistribution.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this repository is dual licensed as above, without additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this repository is dual licensed as above, without additional
+  terms or conditions.
