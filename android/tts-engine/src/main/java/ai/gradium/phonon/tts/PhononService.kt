@@ -86,7 +86,6 @@ class PhononService : TextToSpeechService() {
             callback.done()
             return
         }
-        val trim = LeadingSilence(SAMPLE_RATE)
         val max = callback.maxBufferSize
         // Whether Android still takes audio: it stops taking it once this request is stopped.
         fun send(pcm: FloatArray): Boolean {
@@ -103,9 +102,8 @@ class PhononService : TextToSpeechService() {
             synchronized(model) {
                 model.tts.setLanguage(lang)
                 speaker?.let { model.tts.setVoice(it) }
-                model.tts.speak(text) { pcm -> !stopped && send(trim.trim(pcm)) }
+                model.tts.speak(text) { pcm -> !stopped && send(pcm) }
             }
-            if (!stopped) send(trim.flush())
             callback.done()
         } catch (e: Exception) {
             Log.e(TAG, "synthesis failed", e)

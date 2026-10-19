@@ -57,10 +57,6 @@ caller of it, filling the same folder.
   larger than Android's buffer.
 - **Stopping.** When Android stops a request, the engine answers the library's next piece of
   audio with false, which ends generation there.
-- **Leading silence.** Each utterance starts with a stretch of near-silence before the speech.
-  `LeadingSilence` holds audio back until a 10 ms window reaches -40 dBFS, then plays from 20 ms
-  before it, so the first sound is heard sooner. It drops at most 300 ms, so a quiet start still
-  plays, and only touches the start of an utterance.
 - **Threads.** The engine sets `RAYON_NUM_THREADS` to 2 before loading, as the Android guide
   suggests. Measure on your target phones before changing it.
 
@@ -82,12 +78,6 @@ wait for that first load, for up to a minute.
   path otherwise. The two classes share a name and package, so one would need renaming first.
 
 ## Test
-
-`src/test` checks `LeadingSilence` on the JVM:
-
-```sh
-./gradlew testDebugUnitTest
-```
 
 `src/androidTest` drives the installed engine through `TextToSpeech`, as any app would. It needs a
 device or emulator; with a model imported, it writes WAV files for English, French and every
