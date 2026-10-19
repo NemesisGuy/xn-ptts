@@ -1,4 +1,5 @@
-//! Amounts of money: "$1,234.56" becomes "1 thousand 234 dollars and 56 cents".
+//! Amounts of money: "$1,234.56" becomes "1 thousand 234 dollars and 56 cents", "30¢" becomes
+//! "30 cents".
 
 use super::numbers::number_words;
 use super::{all_digits, split_suffix};
@@ -10,10 +11,11 @@ enum Currency {
     Euro,
     Pound,
     Yen,
+    Cent,
 }
 
 impl Currency {
-    const SYMBOLS: [char; 4] = ['$', '€', '£', '¥'];
+    const SYMBOLS: [char; 5] = ['$', '€', '£', '¥', '¢'];
 
     fn from_symbol(symbol: char) -> Option<Self> {
         match symbol {
@@ -21,6 +23,7 @@ impl Currency {
             '€' => Some(Self::Euro),
             '£' => Some(Self::Pound),
             '¥' => Some(Self::Yen),
+            '¢' => Some(Self::Cent),
             _ => None,
         }
     }
@@ -42,6 +45,9 @@ impl Currency {
             (Self::Yen, Lang::Fr) => ("yen", "yens"),
             (Self::Yen, Lang::Es) => ("yen", "yenes"),
             (Self::Yen, Lang::Pt) => ("iene", "ienes"),
+            (Self::Cent, Lang::En | Lang::Fr) => ("cent", "cents"),
+            (Self::Cent, Lang::De) => ("Cent", "Cent"),
+            (Self::Cent, Lang::Es | Lang::Pt) => ("centavo", "centavos"),
         }
     }
 }
@@ -49,7 +55,7 @@ impl Currency {
 /// A number with a currency symbol before or after it, read as [`super::numbers`] reads the
 /// number, followed by the currency's name. In English and French an amount with exactly two
 /// decimals is read in cents: "$4.59" becomes "4 dollars and 59 cents", "4,59€" becomes "4 euros
-/// et 59 centimes".
+/// et 59 centimes". A cent sign is never read in cents of itself: "1.5¢" is "1 point 5 cents".
 pub(super) fn currency(word: &str, lang: Lang) -> Option<String> {
     let (body, suffix) = split_suffix(word);
     // "-$500" reads as "$-500" does.
@@ -68,14 +74,18 @@ pub(super) fn currency(word: &str, lang: Lang) -> Option<String> {
     if let Some((amount, scale)) = split_scale(amount, lang) {
         return with_scale(amount, scale, currency, lang).map(|spoken| format!("{spoken}{suffix}"));
     }
-    if let Some(spoken) = with_cents(amount, currency, lang) {
+    if currency != Currency::Cent
+        && let Some(spoken) = with_cents(amount, currency, lang)
+    {
         return Some(format!("{spoken}{suffix}"));
     }
-    let (amount, _) = number_words(amount, lang)?;
+    let (spoken, _) = number_words(amount, lang)?;
     // Always the plural, even for 1: "$1" reads "1 dollars". A quirk, kept so that the readings
-    // stay identical to the ones the serving stack already speaks.
-    let (_, name) = currency.name(lang);
-    Some(format!("{}{suffix}", with_name(&amount, name, lang)))
+    // stay identical to the ones the serving stack already speaks. The cent sign is newer than
+    // that, so "1¢" reads "1 cent".
+    let (one, many) = currency.name(lang);
+    let name = if currency == Currency::Cent && amount == "1" { one } else { many };
+    Some(format!("{}{suffix}", with_name(&spoken, name, lang)))
 }
 
 /// `amount` read as whole units and cents, when it has exactly two decimals: English writes it
@@ -229,6 +239,16 @@ mod tests {
             (Lang::De, "$1000000", "eine Million Dollar"),
             (Lang::En, "£250", "250 pounds"),
             (Lang::Fr, "£250", "250 livres"),
+            // A cent sign, plural apart from 1, and never split into cents of cents.
+            (Lang::En, "30¢", "30 cents"),
+            (Lang::En, "30¢.", "30 cents."),
+            (Lang::En, "1¢", "1 cent"),
+            (Lang::En, "99¢!", "99 cents!"),
+            (Lang::En, "1.50¢", "1 point 50 cents"),
+            (Lang::Fr, "30¢", "30 cents"),
+            (Lang::De, "30¢", "30 Cent"),
+            (Lang::Es, "30¢", "30 centavos"),
+            (Lang::Pt, "1¢", "1 centavo"),
             (Lang::De, "£250", "250 Pfund"),
             (Lang::Es, "£250", "250 libras"),
             // A symbol after it.

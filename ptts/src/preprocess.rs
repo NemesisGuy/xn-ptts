@@ -860,6 +860,7 @@ mod tests {
             // A `$` that is not part of an amount goes before a period, as other symbols do.
             (Lang::En, "In $.", "In."),
             (Lang::En, "Only £50 left.", "Only 50 pounds left."),
+            (Lang::En, "The fee is 2.9% plus 30¢.", "The fee is 2.9% plus 30 cents."),
             (Lang::Fr, "Ça coûte 500€ aujourd'hui.", "Ça coûte 500 euros aujourd'hui."),
             (Lang::De, "Es kostet $2500 heute.", "Es kostet 2 Tausend 500 Dollar heute."),
             (
