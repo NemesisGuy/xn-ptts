@@ -57,7 +57,7 @@ class EngineTest {
         assertTrue(tts.voices.isNullOrEmpty())
         val file = File(context.filesDir, "test-none.wav")
         assertEquals(TextToSpeech.SUCCESS, tts.synthesizeToFile(SHORT, Bundle(), file, "none"))
-        assertTrue("no error", latch("error:none").await(30, TimeUnit.SECONDS))
+        assertTrue("the error was not reported", latch("error:none").await(30, TimeUnit.SECONDS))
     }
 
     @Test

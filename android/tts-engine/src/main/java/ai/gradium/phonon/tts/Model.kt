@@ -78,7 +78,7 @@ object Model {
         pending = loader.submit {
             state = try {
                 // Before the first load: the library's thread pool reads it once. One thread per
-                // core is too many on phones that mix fast and slow cores.
+                // core is too many on phones that mix fast and slow cores. A value already set wins.
                 Os.setenv("RAYON_NUM_THREADS", THREADS.toString(), false)
                 // Text is normalized per request with setLanguage; this is only the first one.
                 val tts = PhononTTS(dir, languages.firstOrNull() ?: "none")
@@ -118,9 +118,13 @@ object Model {
             require(File(staging, "model.q8.gguf").isFile || File(staging, "model.safetensors").isFile) {
                 "the folder has no model.q8.gguf or model.safetensors"
             }
-            unload()
-            dir(context).deleteRecursively()
-            check(staging.renameTo(dir(context))) { "could not move the checkpoint into place" }
+            // Held across the swap, so a load() from the service cannot start on the old folder
+            // between unloading it and replacing it.
+            synchronized(this) {
+                unload()
+                dir(context).deleteRecursively()
+                check(staging.renameTo(dir(context))) { "could not move the checkpoint into place" }
+            }
         } finally {
             staging.deleteRecursively()
         }

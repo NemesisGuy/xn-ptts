@@ -106,7 +106,10 @@ class SettingsActivity : Activity() {
             when {
                 !isDir && name in FILES && name != skip -> copy(tree, id, File(into, name))
                 isDir && name in VOICE_DIRS -> for ((voice, child) in children(tree, id)) {
-                    if (!child.second && voice.endsWith(".safetensors")) copy(tree, child.first, File(into, "$name/$voice"))
+                    // The name comes from the document provider: keep it inside the voices folder.
+                    if (!child.second && voice.endsWith(".safetensors") && '/' !in voice) {
+                        copy(tree, child.first, File(into, "$name/$voice"))
+                    }
                 }
             }
         }

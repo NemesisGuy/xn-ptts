@@ -48,7 +48,7 @@ caller of it, filling the same folder.
 
 - **Languages.** Android asks in ISO 639 codes. `eng`, `fra`, `deu`, `spa` and `por` map to the
   runtime's `en`, `fr`, `de`, `es` and `pt`, and each request's text is normalized for its own
-  language (`PhononTTS.setLanguage`, which is `ptts_set_lang`). A checkpoint whose config lists
+  language (`PhononTTS.setLanguage`, which is `ptts_set_language`). A checkpoint whose config lists
   `languages` offers only those; one that lists none offers all five. Countries are accepted but
   make no difference. Without a model, every language reports missing data.
 - **Voices.** Each checkpoint voice is offered in each language, named `<language>-<voice>`, such
@@ -64,7 +64,9 @@ caller of it, filling the same folder.
 - **Threads.** The engine sets `RAYON_NUM_THREADS` to 2 before loading, as the Android guide
   suggests. Measure on your target phones before changing it.
 
-The model loads once, off the main thread, and stays loaded while the service runs.
+The model loads once, off the main thread, and stays loaded while the service runs. Language
+checks are answered from the installed files right away. Voice lists, voice names and synthesis
+wait for that first load, for up to a minute.
 
 ## Not done yet
 
