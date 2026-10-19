@@ -20,7 +20,9 @@ pub const DEFAULT_MODEL: &str =
 
 /// Standard weight filenames, ordered by the requested quantization.
 pub fn weight_candidates(quant: Quant) -> [&'static str; 2] {
-    if quant == Quant::Q80 {
+    if quant == Quant::Q4k {
+        ["model.q4k.gguf", "model.safetensors"]
+    } else if quant == Quant::Q80 {
         ["model.q8.gguf", "model.safetensors"]
     } else {
         ["model.safetensors", "model.q8.gguf"]
@@ -78,7 +80,7 @@ impl Checkpoint {
                         crate::hub::SCHEME
                     )
                 }
-                _ => format!("no checkpoint at {}", input.display()),
+                _ => format!("no checkpoint at {input:?}"),
             }),
             _ => Error::Io(e),
         })?;
@@ -103,8 +105,7 @@ impl Checkpoint {
                 .find(|p| p.is_file())
                 .ok_or_else(|| {
                     Error::NotFound(format!(
-                        "no weights in {}; expected one of {} or an explicit weights path",
-                        dir.display(),
+                        "no weights in {dir:?}; expected one of {} or an explicit weights path",
                         weight_candidates(options.quant).join(", ")
                     ))
                 })?,
@@ -128,11 +129,11 @@ impl Checkpoint {
     /// Add the voices of a JSONL catalog, see [`crate::loader::read_voice_catalog`],
     /// replacing any of the same name.
     pub fn add_voice_catalog(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        let mut voices = std::collections::BTreeMap::new();
         for (name, path) in crate::loader::read_voice_catalog(path.as_ref())? {
-            self.voices.retain(|(known, _)| *known != name);
-            self.voices.push((name, path));
+            voices.insert(name, path);
         }
-        self.voices.sort();
+        self.voices = voices.into_iter().collect();
         Ok(())
     }
 
@@ -178,12 +179,12 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<TTSConfig> {
     let path = path.as_ref();
     let text = std::fs::read_to_string(path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => {
-            Error::NotFound(format!("cannot read config {}: {e}", path.display()))
+            Error::NotFound(format!("cannot read config {path:?}: {e}"))
         }
         _ => Error::Io(e),
     })?;
     serde_json::from_str(&text)
-        .map_err(|e| Error::InvalidData(format!("cannot parse config {}: {e}", path.display())))
+        .map_err(|e| Error::InvalidData(format!("cannot parse config {path:?}: {e}")))
 }
 
 pub(crate) fn validate_relative_path(path: &str) -> Result<()> {
@@ -201,7 +202,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<()> {
 
 fn required_file(path: &Path) -> Result<PathBuf> {
     if !path.is_file() {
-        return Err(Error::NotFound(format!("checkpoint file is missing: {}", path.display())));
+        return Err(Error::NotFound(format!("checkpoint file is missing: {path:?}")));
     }
     Ok(path.to_path_buf())
 }
