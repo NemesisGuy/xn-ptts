@@ -52,6 +52,13 @@ impl Currency {
     }
 }
 
+/// Whether `c` is a currency symbol the rule reads. The character pass joins one to the number
+/// before it, so that "250 €", as French, German, Spanish and Portuguese write it, reads as
+/// "250€".
+pub(in crate::preprocess) fn is_symbol(c: char) -> bool {
+    Currency::from_symbol(c).is_some()
+}
+
 /// A number with a currency symbol before or after it, read as [`super::numbers`] reads the
 /// number, followed by the currency's name. In English and French an amount with exactly two
 /// decimals is read in cents: "$4.59" becomes "4 dollars and 59 cents", "4,59€" becomes "4 euros
@@ -142,9 +149,13 @@ pub(super) fn scaled(words: &[&str], lang: Lang) -> Option<(String, usize)> {
     if !scale_word(scale, lang) {
         return None;
     }
-    let symbol = word.chars().next()?;
+    // "$2 million", or "2 € millions" once the character pass has joined it to "2€ millions".
+    let (symbol, amount) = match word.strip_prefix(Currency::SYMBOLS) {
+        Some(amount) => (word.chars().next()?, amount),
+        None => (word.chars().next_back()?, word.strip_suffix(Currency::SYMBOLS)?),
+    };
     let currency = Currency::from_symbol(symbol)?;
-    let spoken = with_scale(&word[symbol.len_utf8()..], scale, currency, lang)?;
+    let spoken = with_scale(amount, scale, currency, lang)?;
     Some((format!("{spoken}{suffix}"), 2))
 }
 

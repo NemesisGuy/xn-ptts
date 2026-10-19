@@ -15,6 +15,8 @@ mod times;
 mod tlds;
 mod urls;
 
+pub(super) use currency::is_symbol as is_currency_symbol;
+
 /// A rule: it rewrites a whole word in a language, or declines it.
 type Rewrite = fn(&str, Lang) -> Option<String>;
 
