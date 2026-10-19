@@ -649,10 +649,11 @@ mod tests {
     }
 
     #[test]
-    fn q8_weights_lead_only_for_q8() {
+    fn gguf_weights_lead_only_for_their_quant() {
         use ptts::checkpoint::weight_candidates;
         assert_eq!(weight_candidates(Quant::Q80)[0], "model.q8.gguf");
-        for quant in [Quant::F32, Quant::Q4k, Quant::Q81] {
+        assert_eq!(weight_candidates(Quant::Q4k)[0], "model.q4k.gguf");
+        for quant in [Quant::F32, Quant::Q81] {
             assert_eq!(weight_candidates(quant)[0], "model.safetensors", "{quant:?}");
         }
     }
