@@ -98,13 +98,3 @@ that every language reports missing data and synthesis fails cleanly.
 ./gradlew connectedDebugAndroidTest
 adb shell run-as ai.gradium.phonon.tts ls files   # the WAVs it wrote
 ```
-
-## Files
-
-| File | What it is |
-|---|---|
-| `PhononService.kt` | The `TextToSpeechService`: languages, voices, synthesis and stop. |
-| `Model.kt` | The installed checkpoint and the loaded model, shared by the service and the settings. |
-| `LeadingSilence.kt` | Drops the near-silence each utterance starts with. |
-| `SettingsActivity.kt` | Status, folder import, and a link to the system settings. |
-| `DataActivity.kt` | Answers the system settings' data check and sample text requests. |
