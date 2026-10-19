@@ -181,6 +181,16 @@ impl Lang {
         }
     }
 
+    /// The word "n°" abbreviates, as in "le n°5".
+    fn number_sign(self) -> &'static str {
+        match self {
+            Lang::En => "number",
+            Lang::Fr => "numéro",
+            Lang::De => "Nummer",
+            Lang::Es | Lang::Pt => "número",
+        }
+    }
+
     fn degrees(self, one: bool) -> &'static str {
         match (self, one) {
             (Lang::En, true) => "degree",
@@ -446,6 +456,13 @@ impl StringAppender {
                 .is_some_and(|i| b[i].is_ascii_digit() || b[i] == '.' || b[i] == ',')
     }
 
+    /// Whether the text ends with an "n" or "N" that is a word of its own: before a `°`, it is
+    /// the number sign "n°" rather than "n degrees".
+    fn ends_with_n(&self) -> bool {
+        matches!(self.buffer.last(), Some('n' | 'N'))
+            && !self.buffer.len().checked_sub(2).is_some_and(|i| self.buffer[i].is_alphanumeric())
+    }
+
     /// `word` as a word of its own, for a symbol read aloud.
     fn push_spoken(&mut self, word: &str) {
         self.push_whitespace();
@@ -629,6 +646,14 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
                 };
                 let of = (empty > 0).then_some(full + empty + usize::from(half));
                 res.push_spoken(&lang.stars(&n, of));
+            }
+            '°' if res.ends_with_n() => {
+                let word = lang.number_sign();
+                if res.buffer.pop() == Some('N') {
+                    res.push_spoken(&format!("{}{}", word[..1].to_uppercase(), &word[1..]));
+                } else {
+                    res.push_spoken(word);
+                }
             }
             '°' => {
                 res.push_spoken(lang.degrees(res.ends_with_one()));
@@ -939,6 +964,19 @@ mod tests {
         assert_eq!(
             normalize_text("Il fait -5°C.", Lang::Fr, Rules::DEFAULT),
             "Il fait moins 5 degrés Celsius."
+        );
+        // "n°" is the number sign, not "n degrees"; an "n" ending a longer word is not one.
+        assert_eq!(
+            normalize_text("Appelez le n°5, ou le N° 12.", Lang::Fr, Rules::DEFAULT),
+            "Appelez le numéro 5, ou le Numéro 12."
+        );
+        assert_eq!(
+            normalize_text("Turn 90°, then 10n°.", Lang::En, Rules::DEFAULT),
+            "Turn 90 degrees, then 10n degrees."
+        );
+        assert_eq!(
+            normalize_text("Es ist Haus n°3.", Lang::De, Rules::DEFAULT),
+            "Es ist Haus Nummer 3."
         );
         assert_eq!(
             normalize_text("Es sind 21°C.", Lang::De, Rules::DEFAULT),
