@@ -34,7 +34,7 @@ The Hub Compose file requires an image release that includes this writable cache
 
 The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. `PTTS_MODEL` and the default model need an image newer than `0.4.0-rc.1`, which reads `PTTS_CONFIG` and `PTTS_REVISION` instead and has no default. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
 
-Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. A JSONL voice catalog, one `{"name", "filename"}` object per line with `filename` relative to the catalog, is loaded with `PTTS_VOICE_CATALOG=/voices/voices.jsonl`. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
+Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. The server also serves the voices of a voice catalog that are in its language, `PTTS_LANG`. The catalog is [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices), downloaded on first start and cached, unless `PTTS_VOICE_CATALOG` names another: an `hf://owner/name[@revision]` repo, or a local JSONL file with one `{"name", "filename"}` object per line and `filename` relative to the catalog, such as `/voices/voices.jsonl`. An empty `PTTS_VOICE_CATALOG` serves only the checkpoint's voices. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
 
 ```bash
 docker compose -f ptts-openai-server/compose.yaml up
@@ -80,7 +80,7 @@ client.audio.speech.create(model="tts-1", voice="default", input="Hello.").write
 | Field | What the server does |
 |---|---|
 | `input` | Required, up to 4096 characters. Long text is split at sentence ends. |
-| `voice` | A voice of this checkpoint, in any case (`GET /v1/audio/voices` lists them), or `default`, which is also what a missing `voice` means. Any other name, such as OpenAI's own `alloy`, is a 400 unless it is set as an [alias](#openai-clients). |
+| `voice` | A voice of this server, in any case (`GET /v1/audio/voices` lists them), or `default`, which is also what a missing `voice` means. Any other name, such as OpenAI's own `alloy`, is a 400 unless it is set as an [alias](#openai-clients). |
 | `response_format` | `mp3` (the default), `opus`, `wav` or `pcm` (headerless 16-bit mono at 24 kHz). `aac` and `flac` are a 400. |
 | `speed` | Only `1.0`: the model has no rate control yet, so other values are a 400. With `--ignore-speed`, any value from `0.25` to `4.0` is accepted and ignored. Values outside that range are always a 400. |
 | `model`, `instructions`, `stream_format` | Accepted and ignored. The reply is always the audio bytes, streamed as they are generated. |
@@ -112,7 +112,7 @@ Here every OpenAI voice is the default voice, except `nova`, which is `VOICE`, o
 - **Open WebUI:** Admin Settings, Audio, Text-to-Speech engine `OpenAI`, API base URL `http://<host>:8880/v1`, any API key. Set the voice to `default` or a voice from `/v1/audio/voices`.
 - **Home Assistant:** use the [Wyoming protocol](#home-assistant), which needs no custom integration. The [sfortis/openai_tts](https://github.com/sfortis/openai_tts) integration also works: Custom endpoint, URL `http://<host>:8880/v1/audio/speech`, model `tts-1`. The voice list is read from `/v1/audio/voices`.
 - **LiveKit Agents:** `openai.TTS(base_url="http://<host>:8880/v1", api_key="unused", model="tts-1", voice="default")`.
-- **SillyTavern:** TTS provider "OpenAI Compatible", endpoint `http://<host>:8880/v1/audio/speech`, voices `default` or the checkpoint's own. Leave the speed at 1, or start the server with `--ignore-speed`.
+- **SillyTavern:** TTS provider "OpenAI Compatible", endpoint `http://<host>:8880/v1/audio/speech`, voices `default` or one from `/v1/audio/voices`. Leave the speed at 1, or start the server with `--ignore-speed`.
 
 ## Home Assistant
 

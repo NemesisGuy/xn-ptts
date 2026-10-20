@@ -9,6 +9,7 @@ use ptts::checkpoint::{Checkpoint, ResolveOptions};
 use ptts::hub::HubSource;
 use ptts::preprocess::Normalize;
 use ptts::synth::{DeviceKind, Quant, Synth};
+use ptts::voice_catalog::{DEFAULT_VOICE_CATALOG, VoiceCatalog};
 use std::sync::Arc;
 
 /// The loaded model and the request defaults, shared by every connection.
@@ -62,12 +63,37 @@ async fn locate(model: &str, quant: Quant) -> Result<(Checkpoint, String)> {
     Ok((checkpoint, name))
 }
 
+/// The voices of the catalog `source` names, each downloaded on first use: those in `lang` and
+/// those with no language, or all of them when `lang` is `none`. A voice that cannot be fetched
+/// is logged and skipped.
+async fn catalog_voices(source: &str, lang: &str) -> Result<Vec<(String, std::path::PathBuf)>> {
+    let (source, lang) = (source.to_string(), lang.to_string());
+    // The blocking Hub client runs its own runtime, which cannot be started inside this one.
+    tokio::task::spawn_blocking(move || {
+        let catalog = VoiceCatalog::new(&source)?;
+        let mut voices = vec![];
+        for voice in catalog.voices()? {
+            if lang != "none" && voice.language.as_deref().is_some_and(|l| l != lang) {
+                continue;
+            }
+            match catalog.fetch(voice) {
+                Ok(path) => voices.push((voice.name.clone(), path)),
+                Err(e) => {
+                    tracing::warn!(voice = %voice.name, error = %e, "failed to fetch catalog voice")
+                }
+            }
+        }
+        Ok(voices)
+    })
+    .await?
+}
+
 /// Load the model named by `model`. The source is required.
 #[allow(clippy::too_many_arguments)]
 pub async fn load_ptts(
     model: &str,
     voice_dir: Option<&std::path::PathBuf>,
-    voice_catalog: Option<&std::path::Path>,
+    voice_catalog: Option<&str>,
     device: DeviceKind,
     quant: Quant,
     temperature: f32,
@@ -94,7 +120,14 @@ pub async fn load_ptts(
         Vec::new()
     };
     if let Some(catalog) = voice_catalog {
-        extra_voices.extend(ptts::loader::read_voice_catalog(catalog)?);
+        match catalog_voices(catalog, normalize.as_str()).await {
+            Ok(voices) => extra_voices.extend(voices),
+            // Offline, a server that needs no catalog voice still starts.
+            Err(e) if catalog == DEFAULT_VOICE_CATALOG => {
+                tracing::warn!(error = %e, "the default voice catalog could not be read")
+            }
+            Err(e) => return Err(e.context(format!("voice catalog {catalog}"))),
+        }
     }
     let frame_rate = m.config.mimi.frame_rate;
     let mut builder = m.builder(normalize).device(device).quant(quant).temperature(temperature);
@@ -134,6 +167,37 @@ pub async fn load_ptts(
         sample_rate,
         frame_size,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn the_catalog_voices_served_are_those_in_the_language() {
+        let dir = std::env::temp_dir().join(format!("ptts-server-catalog-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("voices.jsonl"),
+            r#"{"name": "Zoey", "filename": "voices/a.safetensors", "language": "en"}
+{"name": "Annika", "filename": "voices/b.safetensors", "language": "de"}
+{"name": "Mine", "filename": "voices/c.safetensors"}
+"#,
+        )
+        .unwrap();
+        let source = dir.to_str().unwrap();
+        let names = |voices: Vec<(String, std::path::PathBuf)>| -> Vec<String> {
+            voices.into_iter().map(|(name, _)| name).collect()
+        };
+        assert_eq!(names(catalog_voices(source, "en").await.unwrap()), ["Zoey", "Mine"]);
+        assert_eq!(
+            names(catalog_voices(source, "none").await.unwrap()),
+            ["Zoey", "Annika", "Mine"]
+        );
+        let (_, path) = catalog_voices(source, "de").await.unwrap().remove(0);
+        assert_eq!(path, dir.join("voices/b.safetensors"));
+        assert!(catalog_voices(dir.join("missing").to_str().unwrap(), "en").await.is_err());
+    }
 }
 
 #[cfg(test)]

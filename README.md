@@ -129,8 +129,9 @@ Each checkpoint comes with a default voice. The voice catalog
 [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) has
 many more, in every language Phonon speaks. When a checkpoint does not have the
 voice you ask for, the command line and Python look it up there and download
-only that voice. `ptts --list-voices` lists the catalog with each voice's
-language. Pick a voice in the language of your text.
+only that voice. The servers serve the catalog's voices in their language. `ptts
+--list-voices` lists the catalog with each voice's language. Pick a voice in the
+language of your text.
 
 ```sh
 ptts --lang en --voice Zoey "Hello from Phonon." -o speech.wav

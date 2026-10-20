@@ -35,10 +35,13 @@ struct Args {
     #[arg(long)]
     voice_dir: Option<std::path::PathBuf>,
 
-    /// Optional JSONL voice catalog to load, one `{"name", "filename"}` object per line with
-    /// `filename` relative to the catalog. Voices that fail to load are logged and skipped.
-    #[arg(long)]
-    voice_catalog: Option<std::path::PathBuf>,
+    /// Voice catalog whose voices in --lang are served besides the checkpoint's: a Hugging Face
+    /// repo as hf://owner/name[@revision], or a local JSONL file or folder holding voices.jsonl,
+    /// one `{"name", "filename"}` object per line with `filename` relative to the catalog.
+    /// Defaults to the default voice catalog; empty for none. Voices that fail to load are logged
+    /// and skipped.
+    #[arg(long, default_value = ptts::voice_catalog::DEFAULT_VOICE_CATALOG)]
+    voice_catalog: String,
 
     #[arg(long, default_value_t = 0.3)]
     temperature: f32,
@@ -144,7 +147,7 @@ async fn build_app_state(args: &Args) -> Result<model::AppState> {
     model::load_ptts(
         &args.model,
         args.voice_dir.as_ref(),
-        args.voice_catalog.as_deref(),
+        Some(args.voice_catalog.as_str()).filter(|c| !c.is_empty()),
         device,
         quant,
         args.temperature,

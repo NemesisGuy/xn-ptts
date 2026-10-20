@@ -8,7 +8,7 @@ cargo run --release -p ptts-ws-server -- --quant q8 --lang en
 
 `--model` loads another one: a checkpoint folder, or a Hugging Face repo as `hf://owner/name`.
 
-The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts`. `--addr` changes the address. The checkpoint supplies its config, tokenizer, weights, and voices; `--model hf://owner/name@revision` selects a Hub revision. Building requires libopus (`apt-get install libopus-dev` or `brew install opus`).
+The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts`. `--addr` changes the address. The checkpoint supplies its config, tokenizer, weights, and voices; `--model hf://owner/name@revision` selects a Hub revision. The server also offers the voices in its `--lang` from the voice catalog [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices), downloaded on first start, or from the one `--voice-catalog` names: an `hf://` repo or a local `voices.jsonl`. `--voice-catalog ''` offers only the checkpoint's voices. Building requires libopus (`apt-get install libopus-dev` or `brew install opus`).
 
 By default, one WebSocket session is accepted at a time. `--max-concurrent-requests N` sets a positive limit. Excess connections receive HTTP 429 before the WebSocket upgrade, with a message asking the client to retry after an active session closes.
 
