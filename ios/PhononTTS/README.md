@@ -37,9 +37,7 @@ dependencies: [
 dependencies: [.product(name: "ptts", package: "xn-ptts")],
 ```
 
-Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum. Releases up to 0.4.0-rc.2 came before it: use the archive below for those.
-
-A `from:` range skips pre-release versions. To use one, pin it with `exact:` and its version.
+Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum.
 
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 

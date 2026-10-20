@@ -39,9 +39,7 @@ setup](#model-setup) to use another model.
 ## What you get
 
 - **Small enough to ship:** Choose Phonon 31M or Phonon 40M. Each can ship
-  inside a mobile app or load in a browser tab. In a browser, Phonon 31M loads
-  straight from Hugging Face. The Phonon 40M models are gated, so you serve
-  their files yourself.
+  inside a mobile app or load in a browser tab.
 - **Five languages:** Speak English, French, German, Spanish, and Portuguese,
   with more languages planned. Phonon 40M multilingual speaks all five in one
   model. Phonon 40M also comes as one model per language.
@@ -88,7 +86,7 @@ Each goal links to its quickstart below.
 | [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a prepared Core ML bundle. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle, exported from a Phonon model. [Swift guide](ios/PhononTTS/README.md). |
 | [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
@@ -117,7 +115,7 @@ The Phonon models on Hugging Face:
 
 Phonon 31M is public. The Phonon 40M models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31M from Hugging Face. To use a Phonon 40M model in a browser, download its files and serve them with your app, under the model's license.
 
-To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Gated and private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
+To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos also need `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
 
 A checkpoint folder looks like this:
 
@@ -165,15 +163,8 @@ These examples use the default model.
 <details>
 <summary>Show command line quickstart</summary>
 
-[uv](https://docs.astral.sh/uv/) can run the Python command in an isolated environment:
-
-```sh
-uvx ptts --lang en "Hello from Phonon." -o speech.wav
-```
-
-`uvx` manages the Python environment and dependencies.
-
-On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
+With [uv](https://docs.astral.sh/uv/), `uvx ptts` runs the command without
+installing it, as in [Try it](#try-it). On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
 tap:
 
 ```sh
@@ -200,7 +191,7 @@ ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 \
   "Bonjour, ici Phonon." -o speech.wav
 ```
 
-Use `--voice NAME` to choose a voice; omitting it uses the model's default selection. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
+Use `--voice NAME` to choose a voice, from the model or the [voice catalog](#voices); omitting it uses the model's default voice. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
 
 </details>
 
@@ -291,10 +282,11 @@ Threading and WebGPU setup are covered in the [browser guide
 In Xcode, choose *File, Add Package Dependencies*, enter
 `https://github.com/gradium-ai/xn-ptts.git`, and select the **`ptts`** library
 product. Swift Package Manager downloads the matching compiled framework. This
-path needs no Rust build. Releases up to 0.4.0-rc.2 instead ship the package as
-`ptts-swift-<version>.zip`: extract it and add the folder as a local package.
+path needs no Rust build.
 
-Add the prepared Core ML model bundle to your app as a folder reference named `Models`:
+Export a Core ML model bundle with `export_coreml`, as the [Swift
+guide](ios/PhononTTS/README.md) shows, and add it to your app as a folder
+reference named `Models`:
 
 ```swift
 import Foundation
@@ -309,7 +301,7 @@ let player = try PhononPlayer()
 try await player.play(tts.stream("Hello from Phonon."))
 ```
 
-Keep `tts` and `player` in your app's state while audio plays. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. The public Core ML model bundle is still being prepared. [Swift guide and Stop example →](ios/PhononTTS/README.md)
+Keep `tts` and `player` in your app's state while audio plays. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. [Swift guide and Stop example →](ios/PhononTTS/README.md)
 
 </details>
 
@@ -369,7 +361,7 @@ curl http://localhost:8880/v1/audio/speech \
   -o speech.wav
 ```
 
-For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice the model has (`GET /v1/audio/voices` lists them). The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
+For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice the server has (`GET /v1/audio/voices` lists them). The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
 
 For a download cache that survives container replacement, use the [Hub Compose file](ptts-openai-server/compose.hub.yaml). Set `PTTS_MODEL` to serve another model: `hf://OWNER/MODEL@COMMIT_SHA`, or a folder mounted into the container. For a gated model, such as `hf://gradium/phonon-40m-fr`, also set `HF_TOKEN`. The image contains no model weights. Deployment and access controls are in the [server guide →](ptts-openai-server/README.md).
 
@@ -423,9 +415,8 @@ Phonon builds on the ground-breaking work on Continuous Audio Language Models
 developed by Kyutai. This line of work resulted in [Pocket
 TTS](https://github.com/kyutai-labs/pocket-tts) which Phonon builds heavily on.
 It uses the [xn](https://github.com/LaurentMazare/xn) Rust tensor runtime.
-Gradium's Phonon checkpoints are the primary target. Compatible Pocket TTS
-checkpoints use the same explicit loading interface when they supply their own
-config, tokenizer JSON, weights, and voices.
+Pocket TTS checkpoints load too, when they supply their own config, tokenizer
+JSON, weights, and voices.
 
 ## License
 
@@ -439,4 +430,4 @@ redistribution.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository is dual licensed as above, without additional
-  terms or conditions.
+terms or conditions.
