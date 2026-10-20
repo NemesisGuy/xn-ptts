@@ -472,6 +472,21 @@ impl StringAppender {
             && b.iter().rev().find(|c| !c.is_whitespace()).is_some_and(char::is_ascii_digit)
     }
 
+    /// How many digits the number the text ends with has, when French can group thousands after
+    /// it, "40" before "40 000": one to three digits, not starting with zero, and a word of their own
+    /// that does not follow another number.
+    fn thousands_lead(&self) -> Option<usize> {
+        let b = &self.buffer;
+        let n = b.iter().rev().take_while(|c| c.is_ascii_digit()).count();
+        let before = &b[..b.len() - n];
+        let word_before = before.iter().rev().find(|c| !c.is_whitespace());
+        ((1..=3).contains(&n)
+            && b[b.len() - n] != '0'
+            && !before.last().is_some_and(|&c| c.is_alphanumeric() || ",.".contains(c))
+            && !word_before.is_some_and(char::is_ascii_digit))
+        .then_some(n)
+    }
+
     /// `word` as a word of its own, for a symbol read aloud.
     fn push_spoken(&mut self, word: &str) {
         self.push_whitespace();
@@ -634,6 +649,9 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
     let mut res = StringAppender::new();
     let mut chars = input.chars().peekable();
     let mut prev = None;
+    // Where the digits of a French number joined across a thousands space end, so that a further
+    // group joins too: "1 000 000".
+    let mut grouped = 0;
     while let Some(c) = chars.next() {
         match c {
             c if is_double_quote(c) => res.push('"'),
@@ -724,6 +742,19 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
                 res.pop_whitespace();
                 res.push(c);
             }
+            // "40 000", "1 234,56": French groups thousands with a space, plain or non-breaking,
+            // which goes so that the numbers rule reads one number rather than two. Three groups
+            // of three digits are a code, as the digit runs of the numbers rule have it.
+            c if c.is_whitespace()
+                && lang == Lang::Fr
+                && (res.buffer.len() == grouped
+                    || res
+                        .thousands_lead()
+                        .is_some_and(|n| n < 3 || thousands_groups(chars.clone()) == 1))
+                && thousands_groups(chars.clone()) > 0 =>
+            {
+                grouped = res.buffer.len() + 3;
+            }
             '…' => res.push('.'),
             '=' => res.push_spoken(lang.special_chars().equals),
             ':' if !prev.is_none_or(char::is_whitespace)
@@ -749,6 +780,26 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
     let text = res.into_string();
     let text = rewrite::rewrite_text(&text, lang, rules, |w| spell_symbols(w, lang, rules));
     strip_closing_quote(&text).to_string()
+}
+
+/// How many groups of exactly three digits, each but the first after a space, `chars` starts
+/// with: the rest of a French number. None when more digits follow them, as in a code ("71 002
+/// 4489").
+fn thousands_groups(chars: impl Iterator<Item = char>) -> usize {
+    let ahead: Vec<char> = chars.take(64).collect();
+    let (mut n, mut i) = (0, 0);
+    loop {
+        match ahead[i..].iter().take_while(|c| c.is_ascii_digit()).count() {
+            3 => n += 1,
+            0 => return n,
+            _ => return 0,
+        }
+        i += 3;
+        if !ahead.get(i).is_some_and(|c| c.is_whitespace()) {
+            return n;
+        }
+        i += 1;
+    }
 }
 
 fn strip_closing_quote(text: &str) -> &str {
@@ -1029,6 +1080,30 @@ mod tests {
         ];
         for (lang, input, expected) in spaced {
             assert_eq!(normalize_text(input, lang, Rules::DEFAULT), expected, "{input:?}");
+        }
+        // French groups thousands with a space, which joins them into one number.
+        let grouped = [
+            ("Elle possède 40 000 livres.", "Elle possède 40 mille livres."),
+            ("Lot de 1\u{202f}200 unités.", "Lot de mille 200 unités."),
+            ("La prime est de 1 000 €.", "La prime est de mille euros."),
+            ("Il y a 1 200 000 habitants.", "Il y a 1 million 200 mille habitants."),
+            ("Soit 1 234,56 kg.", "Soit mille 234 virgule 56 kg."),
+            (
+                "Le code est RR 123 456 789 GB.",
+                "Le code est RR un deux trois, quatre cinq six, sept huit neuf GB.",
+            ),
+            // Not thousands: a group of other than three digits, or one after a leading zero.
+            (
+                "Appelez le 01 23 45 67 89.",
+                "Appelez le zéro un, deux trois, quatre cinq, six sept, huit neuf.",
+            ),
+            (
+                "Les numéros 12 1234 et 07 123.",
+                "Les numéros 12 mille 234 et zéro sept, un deux trois.",
+            ),
+        ];
+        for (input, expected) in grouped {
+            assert_eq!(normalize_text(input, Lang::Fr, Rules::DEFAULT), expected, "{input:?}");
         }
         assert_eq!(
             normalize_text("Sie zahlte $2 Millionen.", Lang::De, Rules::DEFAULT),
