@@ -11,6 +11,7 @@ out/cpu/package.json.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ import torch
 from load import load
 from package import example_inputs
 
-OUT = Path(__file__).parent / "out" / "cpu"
+OUT = Path(os.environ.get("PHONON_OUT", Path(__file__).parent / "out")) / "cpu"
 GRAPHS = ["prefill", "step"]
 DEVICE = "Samsung Galaxy S25 (Family)"  # any device with a CPU: a DLC is not tied to an SoC
 
