@@ -65,19 +65,20 @@ class EngineTest {
         assumeInstalled()
         val voices = tts.voices.filter { it.locale.language in Model.SUPPORTED }
         assertTrue(voices.isNotEmpty())
-        assertEquals(TextToSpeech.LANG_AVAILABLE, tts.setLanguage(Locale.ENGLISH))
+        val spoken = Locale.forLanguageTag(Model.languages(context).first())
+        assertEquals(TextToSpeech.LANG_AVAILABLE, tts.setLanguage(spoken))
         assertEquals(TextToSpeech.LANG_NOT_SUPPORTED, tts.isLanguageAvailable(Locale.JAPANESE))
     }
 
     @Test
     fun writesEnglish() {
-        assumeInstalled()
+        assumeSpeaks("en")
         write(Locale.ENGLISH, "en", ENGLISH)
     }
 
     @Test
     fun writesFrench() {
-        assumeInstalled()
+        assumeSpeaks("fr")
         write(Locale.FRENCH, "fr", FRENCH)
     }
 
@@ -93,7 +94,7 @@ class EngineTest {
 
     @Test
     fun flushStopsLongSpeech() {
-        assumeInstalled()
+        assumeSpeaks("en")
         tts.setLanguage(Locale.ENGLISH)
         tts.speak(LONG, TextToSpeech.QUEUE_FLUSH, Bundle(), "long")
         assertTrue("never started", latch("start:long").await(60, TimeUnit.SECONDS))
@@ -108,6 +109,11 @@ class EngineTest {
     }
 
     private fun assumeInstalled() = assumeTrue("no checkpoint installed", Model.installed(context))
+
+    private fun assumeSpeaks(lang: String) {
+        assumeInstalled()
+        assumeTrue("the checkpoint does not speak $lang", lang in Model.languages(context))
+    }
 
     private fun write(locale: Locale, tag: String, text: String) {
         assertEquals(TextToSpeech.LANG_AVAILABLE, tts.setLanguage(locale))
