@@ -66,6 +66,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 | `conditions` | | values for the conditioners the checkpoint's `config.json` lists, by name, e.g. `{ padding_bonus: 0.5 }`. Those left out take their defaults. |
 | `quant` | `'q8'` | `'q8'` (smaller, faster) or `'f32'` |
 | `voices` | the default voice | voices to fetch during `load`. Others are fetched the first time they are used. |
+| `voiceCatalog` | `DEFAULT_VOICE_CATALOG` | where a voice the model does not have is looked up, see [Voices](#voices). `null` turns it off. |
 | `cache` | `true` | keep downloads in the Cache API |
 | `onProgress` | | `({ file, loaded, total, cached }) => void`, for a progress bar |
 | `device` | `'cpu'` | `'cpu'`, `'webgpu'` or `'auto'`: where to generate, see [WebGPU](#webgpu) |
@@ -77,7 +78,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 - `tts.stream(text, { voice, temperature, seed, signal })` returns a `SpeechStream`: an async iterable of `Float32Array`, plus `done` and `cancel()`.
 - `tts.synth(text, options)` returns the whole waveform as a `Float32Array`.
 - `tts.synthWav(text, options)` returns a WAV `Blob`.
-- `tts.voices`: the names you can pass as `voice`: the keys of `model.voices`, plus any added with `addVoice`.
+- `tts.voices`: the names you can pass as `voice`: the keys of `model.voices`, plus any added with `addVoice` or fetched from the voice catalog. Any voice of the catalog can be passed too, see [Voices](#voices).
 - `tts.addVoice(name, source)` registers a voice from a URL, `Blob` or bytes of a voice `.safetensors` file.
 - `tts.languages`: the languages the checkpoint's config says it was trained for.
 - `tts.sampleRate`: 24000.
@@ -94,6 +95,7 @@ Requests on one instance run one at a time, in the order they were made.
 - `encodeWav(pcm, sampleRate)` returns a 16-bit mono WAV `Blob`.
 - `concatPcm(chunks)` joins stream chunks.
 - `clearCache()` deletes everything this package has cached.
+- `catalogVoices(catalog)` lists the voices of a voice catalog, `DEFAULT_VOICE_CATALOG` when left out, see [Voices](#voices).
 
 ## The model
 
@@ -123,6 +125,27 @@ await PhononTTS.load({ lang: 'en', model: 'hf://owner/name@COMMIT_SHA' });
 One request to the Hub finds the commit and the repo's files, and every file URL is pinned to that commit, so a cached file is never served after the repo changes. The files are picked as the native frontends pick them: `config.json`, `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, and voices under `voices/` or `embeddings/` plus `default-voice.safetensors` as `default`. The Hub's answer is cached too, so a model loaded once also loads offline, or while the Hub fails; a branch then means the commit it pointed at when last looked up. Private and gated repos cannot be loaded this way: the browser has no token to send.
 
 Every model needs its own `config.json` and `tokenizer.json`. Supply their URLs in `ModelSpec`, or a repo that has them; the package has no model or config fallback. Pocket TTS checkpoints work through this same interface when they supply those files and compatible weights.
+
+## Voices
+
+Each model comes with its own voices, often just a default one. The voice catalog [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) has many more, in every language Phonon speaks. When a request names a voice the model does not have, the package looks it up there and downloads only that voice:
+
+```js
+const tts = await PhononTTS.load({ lang: 'en' });
+const wav = await tts.synthWav('Hello from Phonon.', { voice: 'Zoey' });
+```
+
+A voice is matched by name, in any case and with or without accents, or by its catalog `voiceId`. The model's own voices win over the catalog's. The catalog is fetched only when a voice is missing from the model, and its files are cached like the model's. A voice in `voices`, or a `defaultVoice`, that the model does not have comes from the catalog during `load`.
+
+`catalogVoices()` lists the catalog without loading a model: each voice's `name`, `voiceId`, `language` and `description`, with `null` for what the catalog leaves out. Pick a voice in the language of your text.
+
+```js
+import { catalogVoices } from 'phonon-tts';
+
+const english = (await catalogVoices()).filter((voice) => voice.language === 'en');
+```
+
+`voiceCatalog` defaults to `DEFAULT_VOICE_CATALOG`, which the package exports: `gradium/phonon-voices` pinned to a commit. It can name another public Hugging Face repo with a `voices.jsonl` at its root, as `hf://owner/name` or `hf://owner/name@revision`, pinned to a commit as a model is. It can also be the URL of a `voices.jsonl`, whose voice files are then relative to it; files are cached by URL, so give it a versioned path. Each line of a `voices.jsonl` is a JSON object with the voice's `name` and `filename`, the path of its voice file within the catalog, and optionally `voice_id`, `language` and `description`. `voiceCatalog: null` keeps to the model's own voices.
 
 ## How it runs
 

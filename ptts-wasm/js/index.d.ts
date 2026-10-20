@@ -61,7 +61,10 @@ export interface LoadOptions {
    * Default: {@link DEFAULT_MODEL}.
    */
   model?: ModelSpec | string;
-  /** Voices to fetch up front. Default: just the default voice; others load on first use. */
+  /**
+   * Voices to fetch up front. Default: just the default voice; others load on first use. A
+   * voice the model does not have comes from the voice catalog.
+   */
   voices?: string[];
   /** Keep downloads in the Cache API, so the model is fetched once per browser. Default `true`. */
   cache?: boolean;
@@ -93,10 +96,21 @@ export interface LoadOptions {
    * the model ended up where it did.
    */
   device?: 'auto' | 'webgpu' | 'cpu';
+  /**
+   * Where a voice the model does not have is looked up: a public Hugging Face repo as
+   * `'hf://owner/name'` or `'hf://owner/name@revision'` with a `voices.jsonl` at its root, or
+   * the URL of a `voices.jsonl`, whose voice files are relative to it. Read only when such a
+   * voice is asked for, and then only that voice's file is fetched. `null` turns it off.
+   * Default: {@link DEFAULT_VOICE_CATALOG}.
+   */
+  voiceCatalog?: string | URL | null;
 }
 
 export interface SpeechOptions {
-  /** A name from {@link PhononTTS.voices}. Default: the model's default voice. */
+  /**
+   * A name from {@link PhononTTS.voices}, or a voice of the voice catalog, by name in any case
+   * and with or without accents, or by its `voiceId`. Default: the model's default voice.
+   */
   voice?: string;
   /** Sampling temperature. Default `0.3`. */
   temperature?: number;
@@ -161,7 +175,7 @@ export declare class PhononTTS {
   readonly threads: number;
   /** Why {@link PhononTTS.threads} is what it is, e.g. `'the page is not cross-origin isolated'`. */
   readonly threadsReason: string;
-  /** Voices this model can speak with: bundled ones and any added. */
+  /** Voices this model can speak with: bundled ones, any added, and any from the voice catalog. */
   readonly voices: string[];
   /** The languages the model was trained for, as listed in its config. */
   readonly languages: string[];
@@ -189,6 +203,32 @@ export declare function clearCache(): Promise<boolean>;
 
 /** The model `PhononTTS.load` uses when none is given, as `hf://owner/name@revision`. */
 export declare const DEFAULT_MODEL: string;
+
+/**
+ * The voice catalog `PhononTTS.load` and {@link catalogVoices} use when none is given, as
+ * `hf://owner/name@revision`.
+ */
+export declare const DEFAULT_VOICE_CATALOG: string;
+
+/** A voice of a voice catalog. The fields the catalog leaves out are `null`. */
+export interface CatalogVoice {
+  name: string;
+  voiceId: string | null;
+  language: string | null;
+  description: string | null;
+}
+
+/**
+ * The voices of a voice catalog, named as {@link LoadOptions.voiceCatalog} names one,
+ * {@link DEFAULT_VOICE_CATALOG} when left out. Only the catalog is fetched, no voice and no model.
+ */
+export declare function catalogVoices(
+  catalog?: string | URL,
+  options?: {
+    /** Keep the catalog in the Cache API, as {@link LoadOptions.cache} does. Default `true`. */
+    cache?: boolean;
+  },
+): Promise<CatalogVoice[]>;
 
 /** Encode mono float PCM as a 16-bit WAV file. */
 export declare function encodeWav(pcm: Float32Array, sampleRate: number): Blob;

@@ -16,6 +16,8 @@ class FakeWorker {
     FakeWorker.last = this;
     this.cancelled = new Set();
     this.generations = [];
+    /** `[name, source]` of each voice added. */
+    this.added = [];
     this.terminated = false;
     this.log = [];
   }
@@ -41,7 +43,10 @@ class FakeWorker {
         },
       });
     }
-    if (type === 'add_voice') return this.reply({ type: 'result', id });
+    if (type === 'add_voice') {
+      this.added.push([msg.name, msg.source]);
+      return this.reply({ type: 'result', id });
+    }
     if (type === 'cancel') return this.cancelled.add(id);
     if (type === 'generate') {
       this.generations.push(msg);
@@ -66,7 +71,7 @@ class FakeWorker {
 }
 globalThis.Worker = FakeWorker;
 
-const { PhononTTS } = await import('../index.js');
+const { PhononTTS, DEFAULT_VOICE_CATALOG } = await import('../index.js');
 
 const MODEL = { weights: { q8: 'w' }, tokenizer: 't', config: 'c', voices: { alba: 'a', marius: 'm' } };
 const load = () => PhononTTS.load({ lang: 'en', model: MODEL, workerUrl: 'worker.js' });
@@ -406,4 +411,145 @@ test('a file the worker hands back is cached by the page, not taken for a reply'
   } finally {
     delete globalThis.caches;
   }
+});
+
+// ---- the voice catalog ----
+
+const CATALOG_VOICES = [
+  { filename: 'voices/a1.safetensors', name: 'Zoey', voice_id: 'a1', language: 'en' },
+  { filename: 'voices/b2.safetensors', name: 'Kauã', voice_id: 'b2', language: 'pt' },
+  { filename: 'voices/c3.safetensors', name: 'Alba' },
+];
+const [CATALOG_REPO, CATALOG_SHA] = DEFAULT_VOICE_CATALOG.slice('hf://'.length).split('@');
+const CATALOG_BASE = `https://huggingface.co/${CATALOG_REPO}/resolve/${CATALOG_SHA}`;
+
+/** A Hub with the default catalog holding `voices`, also served at any URL ending in voices.jsonl. */
+function fakeCatalog(voices = CATALOG_VOICES) {
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    url = String(url);
+    requests.push(url);
+    if (url.includes('/api/models/')) return Response.json({ sha: CATALOG_SHA, siblings: [{ rfilename: 'voices.jsonl' }] });
+    if (url.endsWith('/voices.jsonl')) return new Response(voices.map((v) => JSON.stringify(v)).join('\n'));
+    return new Response('', { status: 404 });
+  };
+  return requests;
+}
+
+test('a voice the model lacks comes from the default catalog, which is read once', async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  const requests = fakeCatalog();
+  const tts = await load();
+  assert.deepEqual(requests, [], 'loading the model reads no catalog');
+  await tts.synth('Hi.', { voice: 'zoey' });
+  assert.deepEqual(requests, [
+    `https://huggingface.co/api/models/${CATALOG_REPO}/revision/${CATALOG_SHA}`,
+    `${CATALOG_BASE}/voices.jsonl`,
+  ]);
+  // Only the voice asked for, through the same request `addVoice` makes.
+  assert.deepEqual(FakeWorker.last.added, [['Zoey', `${CATALOG_BASE}/voices/a1.safetensors`]]);
+  assert.equal(FakeWorker.last.generations.at(-1).voice, 'Zoey');
+  assert.deepEqual(tts.voices, ['alba', 'marius', 'Zoey']);
+
+  await tts.synth('Hi.', { voice: 'b2' });
+  await tts.synth('Hi.', { voice: 'KAUA' });
+  await tts.synth('Hi.', { voice: 'Zoey' });
+  assert.equal(requests.length, 2, 'the catalog is not read again');
+  assert.deepEqual(FakeWorker.last.added.map(([name]) => name), ['Zoey', 'Kauã']);
+  assert.deepEqual(FakeWorker.last.generations.map((g) => g.voice), ['Zoey', 'Kauã', 'Kauã', 'Zoey']);
+  tts.dispose();
+});
+
+test("the model's own voices win, in any case, and never read the catalog", async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  const requests = fakeCatalog();
+  const tts = await load();
+  await tts.synth('Hi.');
+  await tts.synth('Hi.', { voice: 'ALBA' });
+  await tts.synth('Hi.', { voice: 'marius' });
+  assert.deepEqual(requests, []);
+  assert.deepEqual(FakeWorker.last.added, []);
+  assert.deepEqual(FakeWorker.last.generations.map((g) => g.voice), ['alba', 'alba', 'marius']);
+  tts.dispose();
+});
+
+test('a voice neither has is unknown, and the error points at the catalog', async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  fakeCatalog();
+  const tts = await load();
+  await assert.rejects(
+    tts.synth('Hi.', { voice: 'nobody' }),
+    /^Error: unknown voice 'nobody'; known: alba, marius, the voices catalogVoices\(\) lists$/,
+  );
+  assert.deepEqual(FakeWorker.last.generations, []);
+  assert.equal((await tts.synth('Again.')).length, 4, 'the queue goes on');
+  tts.dispose();
+});
+
+test("a catalog that cannot be read names the voice and the model's voices", async () => {
+  const tts = await load();
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+  await assert.rejects(
+    tts.synth('Hi.', { voice: 'Zoey' }),
+    /^Error: no voice 'Zoey': the model has alba, marius, and the voice catalog could not be read: cannot reach the Hugging Face Hub .*Failed to fetch$/,
+  );
+  tts.dispose();
+});
+
+test('a catalog at a URL, with a file outside it refused', async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  const requests = fakeCatalog([...CATALOG_VOICES, { filename: '../x.safetensors', name: 'Out' }]);
+  const voiceCatalog = 'https://example.com/v/voices.jsonl';
+  const tts = await PhononTTS.load({ lang: 'en', model: MODEL, voiceCatalog, workerUrl: 'worker.js' });
+  await tts.synth('Hi.', { voice: 'Zoey' });
+  assert.deepEqual(requests, [voiceCatalog]);
+  assert.deepEqual(FakeWorker.last.added, [['Zoey', 'https://example.com/v/voices/a1.safetensors']]);
+  await assert.rejects(
+    tts.synth('Hi.', { voice: 'out' }),
+    /voice 'Out' names the file '\.\.\/x\.safetensors', which is not a path inside the catalog/,
+  );
+  assert.equal(FakeWorker.last.added.length, 1);
+  tts.dispose();
+});
+
+test('voices to preload, and a default voice, may come from the catalog', async () => {
+  FakeWorker.script = { frames: 1, fail: null };
+  fakeCatalog();
+  let tts = await PhononTTS.load({ lang: 'en', model: MODEL, voices: ['ALBA', 'zoey'], workerUrl: 'worker.js' });
+  assert.deepEqual(FakeWorker.last.init.preload, ['alba'], 'the model loads its own');
+  assert.deepEqual(FakeWorker.last.added, [['Zoey', `${CATALOG_BASE}/voices/a1.safetensors`]]);
+  tts.dispose();
+
+  const model = { ...MODEL, defaultVoice: 'kaua' };
+  tts = await PhononTTS.load({ lang: 'en', model, workerUrl: 'worker.js' });
+  assert.deepEqual(FakeWorker.last.init.preload, []);
+  assert.deepEqual(FakeWorker.last.added.map(([name]) => name), ['Kauã']);
+  await tts.synth('Hi.');
+  assert.equal(FakeWorker.last.generations.at(-1).voice, 'Kauã');
+  tts.dispose();
+
+  await assert.rejects(
+    PhononTTS.load({ lang: 'en', model: MODEL, voices: ['nobody'], workerUrl: 'worker.js' }),
+    /unknown voice 'nobody'/,
+  );
+  assert.equal(FakeWorker.last.terminated, true);
+});
+
+test('voiceCatalog: null turns the catalog off', async () => {
+  const requests = fakeCatalog();
+  const tts = await PhononTTS.load({ lang: 'en', model: MODEL, voiceCatalog: null, workerUrl: 'worker.js' });
+  await assert.rejects(tts.synth('Hi.', { voice: 'Zoey' }), /^Error: unknown voice 'Zoey'; known: alba, marius$/);
+  assert.deepEqual(requests, []);
+  tts.dispose();
+});
+
+test('a bad voiceCatalog fails before anything starts', async () => {
+  const requests = fakeCatalog();
+  FakeWorker.last = null;
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: MODEL, voiceCatalog: 'hf://acme' }), /voice catalog on the Hub/);
+  await assert.rejects(PhononTTS.load({ lang: 'en', model: 'hf://acme/speech', voiceCatalog: 5 }), /a voice catalog is/);
+  assert.equal(FakeWorker.last, null);
+  assert.deepEqual(requests, []);
 });

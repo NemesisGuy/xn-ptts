@@ -4,12 +4,14 @@
 // generating never blocks the page; this file only posts requests to it and turns its
 // replies into promises and async iterators.
 
-import { DEFAULT_MODEL, resolveHubModel } from './hub.js';
+import { DEFAULT_MODEL, DEFAULT_VOICE_CATALOG, resolveHubModel } from './hub.js';
+import { VoiceCatalog, foldName } from './catalog.js';
 import { concatPcm, encodeWav } from './wav.js';
 import { storeBytes } from './fetch.js';
 
 export { clearCache } from './fetch.js';
-export { DEFAULT_MODEL } from './hub.js';
+export { DEFAULT_MODEL, DEFAULT_VOICE_CATALOG } from './hub.js';
+export { catalogVoices } from './catalog.js';
 export { encodeWav, concatPcm } from './wav.js';
 
 const LANGS = ['en', 'fr', 'de', 'es', 'pt', 'none'];
@@ -30,6 +32,8 @@ export class PhononTTS {
   #queue = Promise.resolve();
   #voices;
   #defaultVoice;
+  /** Where a voice the model lacks is looked up, or `null`. */
+  #catalog;
   #disposed = false;
   /** Why the instance stopped, when it was not `dispose()`: the worker's crash. */
   #failure = null;
@@ -72,6 +76,7 @@ export class PhononTTS {
       threadsSimdWasmUrl,
       threads = 'auto',
       device,
+      voiceCatalog = DEFAULT_VOICE_CATALOG,
     } = options ?? {};
     // Required, as in every other frontend: the spoken forms of `@`, `+` and `=` differ per
     // language, so normalizing German text as English is worse than not normalizing at all.
@@ -120,6 +125,7 @@ export class PhononTTS {
       }
       return `${name}=${value}`;
     });
+    const catalog = voiceCatalog === null ? null : new VoiceCatalog(voiceCatalog, { cache });
     // Checked last, so a bad option fails before a Hub request.
     const spec = typeof model === 'string' ? await resolveHubModel(model, { cache }) : model;
     if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) {
@@ -141,14 +147,17 @@ export class PhononTTS {
       throw new TypeError(`model has no '${quant}' weights: set model.weights.${quant}, or pick another quant`);
     }
     const defaultVoice = spec.defaultVoice ?? Object.keys(spec.voices ?? {})[0];
-    const preload = voices ?? (defaultVoice ? [defaultVoice] : []);
+    const wanted = voices ?? (defaultVoice ? [defaultVoice] : []);
+    // The model's own voices load with it, and the others from the catalog once it has.
+    const own = Object.keys(spec.voices ?? {});
+    const preload = wanted.flatMap((name) => ownVoice(own, name) ?? []);
 
     // `new URL(..., import.meta.url)` inline, not through a variable: it is the pattern Vite,
     // webpack 5, Parcel and esbuild recognise and rewrite when bundling the worker.
     const worker = workerUrl
       ? new Worker(workerUrl, { type: 'module' })
       : new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    const tts = new PhononTTS(worker, spec, defaultVoice);
+    const tts = new PhononTTS(worker, spec, defaultVoice, catalog);
     try {
       const reply = await tts.#request(
         {
@@ -178,6 +187,7 @@ export class PhononTTS {
       tts.deviceReason = reply.deviceReason;
       tts.threads = reply.threads;
       tts.threadsReason = reply.threadsReason;
+      for (const name of wanted) await tts.#knownVoice(name);
       return tts;
     } catch (e) {
       tts.dispose();
@@ -186,10 +196,11 @@ export class PhononTTS {
   }
 
   /** @private Use `PhononTTS.load`. */
-  constructor(worker, model, defaultVoice) {
+  constructor(worker, model, defaultVoice, catalog) {
     this.#worker = worker;
     this.#voices = new Set(Object.keys(model.voices ?? {}));
     this.#defaultVoice = defaultVoice;
+    this.#catalog = catalog;
     worker.onmessage = ({ data }) => {
       // A file the worker downloaded, for the page to cache: see `storeBytes` for why.
       if (data.type === 'store') return void storeBytes(data.url, data.bytes);
@@ -207,7 +218,10 @@ export class PhononTTS {
     };
   }
 
-  /** Names of the voices this model can speak with: bundled ones and any added. */
+  /**
+   * Names of the voices this model can speak with: bundled ones, any added, and any fetched from
+   * the voice catalog.
+   */
   get voices() {
     return [...this.#voices];
   }
@@ -240,6 +254,33 @@ export class PhononTTS {
     }
     await this.#request({ type: 'add_voice', name, source: payload }, { transfer });
     this.#voices.add(name);
+  }
+
+  /**
+   * The registered name of the voice `query` asks for, as the native `VoiceCatalog::register`
+   * finds it: a voice of the model's wins, matched in any case and with or without accents, and
+   * otherwise the catalog voice it names is added. Rejects when neither has it.
+   */
+  async #knownVoice(query) {
+    if (query === undefined || this.#voices.has(query)) return query;
+    const known = this.voices;
+    const own = ownVoice(known, query);
+    if (own !== undefined) return own;
+    if (!this.#catalog) throw new Error(`unknown voice '${query}'; known: ${known.join(', ')}`);
+    // Offline, or without access to the catalog, the voice asked for and the ones the model has
+    // say more than the download error alone.
+    const voice = await this.#catalog.find(query).catch((e) => {
+      throw new Error(
+        `no voice '${query}': the model has ${known.join(', ')}, and the voice catalog could not be ` +
+          `read: ${e.message}`,
+      );
+    });
+    if (!voice) {
+      const all = [...known, 'the voices catalogVoices() lists'];
+      throw new Error(`unknown voice '${query}'; known: ${all.join(', ')}`);
+    }
+    if (!this.#voices.has(voice.name)) await this.#addVoiceNow(voice.name, await this.#catalog.fileUrl(voice));
+    return voice.name;
   }
 
   /**
@@ -306,14 +347,17 @@ export class PhononTTS {
       },
     };
 
-    const run = () =>
-      new Promise((settled) => {
+    const run = async () => {
+      // In the queue's turn, as `addVoice` is: a voice from the catalog is added while nothing runs.
+      const name = finished || this.#disposed ? voice : await this.#knownVoice(voice).catch(finish);
+      return new Promise((settled) => {
         done.then(settled, settled);
         if (finished || this.#disposed) return finish(this.#disposed ? this.#endError() : null, { cancelled: true });
         started = true;
         this.#pending.set(id, handlers);
-        this.#worker.postMessage({ type: 'generate', id, text, voice, temperature, seed });
+        this.#worker.postMessage({ type: 'generate', id, text, voice: name, temperature, seed });
       });
+    };
     this.#queue = this.#queue.then(run, run);
 
     const stream = {
@@ -396,6 +440,13 @@ export class PhononTTS {
       this.#worker.postMessage({ ...message, id }, transfer);
     });
   }
+}
+
+/** The voice of `names` that `query` names, exactly or as the catalog compares names. */
+function ownVoice(names, query) {
+  if (names.includes(query)) return query;
+  const folded = foldName(query);
+  return names.find((name) => foldName(name) === folded);
 }
 
 /** A seed as the model takes it: a `u64`, carried as a `bigint`. */

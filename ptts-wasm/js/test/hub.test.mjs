@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { DEFAULT_MODEL, parseHubModel, resolveHubModel } = await import('../hub.js');
+const { DEFAULT_MODEL, DEFAULT_VOICE_CATALOG, parseHubCatalog, parseHubModel, resolveHubModel } =
+  await import('../hub.js');
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const BASE = `https://huggingface.co/acme/speech/resolve/${SHA}`;
@@ -184,4 +185,12 @@ test('the default model is the one the native frontends use, pinned to a commit'
   const native = /pub const DEFAULT_MODEL: &str =\s*"([^"]+)";/.exec(rust)?.[1];
   assert.equal(DEFAULT_MODEL, native);
   assert.match(parseHubModel(DEFAULT_MODEL).revision, /^[0-9a-f]{40}$/);
+});
+
+test('the default voice catalog is the one the native frontends use, pinned to a commit', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const rust = await readFile(new URL('../../../ptts/src/voice_catalog.rs', import.meta.url), 'utf8');
+  const native = /pub const DEFAULT_VOICE_CATALOG: &str =\s*"([^"]+)";/.exec(rust)?.[1];
+  assert.equal(DEFAULT_VOICE_CATALOG, native);
+  assert.match(parseHubCatalog(DEFAULT_VOICE_CATALOG).revision, /^[0-9a-f]{40}$/);
 });

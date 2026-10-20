@@ -1,7 +1,7 @@
 // A Hugging Face model repo as a model source, named `hf://owner/name` or
 // `hf://owner/name@revision` as in the native frontends and huggingface_hub. One request to
 // the Hub API gives both the commit and the file list, and the files are picked by the same
-// rules as the native Hub loader.
+// rules as the native Hub loader. A voice catalog on the Hub is named and pinned the same way.
 
 import { openCache } from './fetch.js';
 
@@ -12,6 +12,18 @@ const HUB = 'https://huggingface.co';
  * `DEFAULT_MODEL` in `ptts/src/checkpoint.rs`; the tests hold the two together.
  */
 export const DEFAULT_MODEL = 'hf://davencyw/pocket-tts-ptts@7cc3c90b88f3e6617ded1b9b74100d1cd0162d90';
+
+/**
+ * The voice catalog `PhononTTS.load` and `catalogVoices` use when none is given, pinned to a
+ * commit. A copy of `DEFAULT_VOICE_CATALOG` in `ptts/src/voice_catalog.rs`; the tests hold the
+ * two together.
+ */
+export const DEFAULT_VOICE_CATALOG = 'hf://gradium/phonon-voices@da6c9ec0d47be8df5c87c730a3aa97187f3229c3';
+
+/** `hf://owner/name` or `hf://owner/name@revision`. */
+const HUB_SOURCE = /^hf:\/\/([\w.-]+\/[\w.-]+)(?:@(\S+))?$/;
+/** The catalog file at the root of a voice catalog repo, as `CATALOG_FILE` in Rust. */
+const CATALOG_FILE = 'voices.jsonl';
 
 /** Weights per quant, in the order the native `weight_candidates` tries them. */
 const WEIGHTS = {
@@ -30,7 +42,7 @@ const DEFAULT_VOICE_FILE = 'default-voice.safetensors';
  * @returns {{ repo: string, revision: string }}
  */
 export function parseHubModel(source) {
-  const match = /^hf:\/\/([\w.-]+\/[\w.-]+)(?:@(\S+))?$/.exec(source);
+  const match = HUB_SOURCE.exec(source);
   if (!match) {
     throw new TypeError(
       `model must be a ModelSpec or a Hugging Face repo, 'hf://owner/name' or ` +
@@ -54,7 +66,84 @@ export function parseHubModel(source) {
  * @returns {Promise<import('./index.js').ModelSpec>}
  */
 export async function resolveHubModel(source, { cache = true } = {}) {
-  const { repo, revision } = parseHubModel(source);
+  const { repo, info } = await lookUp(source, parseHubModel(source), cache);
+
+  const files = new Set((info.siblings ?? []).map((s) => s.rfilename));
+  const url = (file) =>
+    `${HUB}/${repo}/resolve/${info.sha}/${file.split('/').map(encodeURIComponent).join('/')}`;
+
+  const weights = {};
+  for (const [quant, names] of Object.entries(WEIGHTS)) {
+    const found = names.find((name) => files.has(name));
+    if (found) weights[quant] = url(found);
+  }
+  const missing = ['config.json', 'tokenizer.json'].filter((name) => !files.has(name));
+  if (!weights.q8) missing.push(`weights (${WEIGHTS.q8.join(' or ')})`);
+  if (missing.length > 0) {
+    throw new Error(`${source} at ${info.sha} has no ${missing.join(', ')}`);
+  }
+
+  const voiceFiles = new Map();
+  for (const dir of VOICE_DIRS) {
+    for (const file of files) {
+      if (!file.startsWith(`${dir}/`) || !file.endsWith('.safetensors')) continue;
+      const name = file.slice(dir.length + 1, -'.safetensors'.length);
+      if (name && !name.includes('/') && !voiceFiles.has(name)) voiceFiles.set(name, file);
+    }
+  }
+  if (!voiceFiles.has('default') && files.has(DEFAULT_VOICE_FILE)) {
+    voiceFiles.set('default', DEFAULT_VOICE_FILE);
+  }
+
+  const names = [...voiceFiles.keys()].sort();
+  // As the native `default_voice`: `default` if there is one, else the first by name.
+  const defaultVoice = voiceFiles.has('default') ? 'default' : names[0];
+  return {
+    weights,
+    tokenizer: url('tokenizer.json'),
+    config: url('config.json'),
+    voices: Object.fromEntries(names.map((name) => [name, url(voiceFiles.get(name))])),
+    ...(defaultVoice ? { defaultVoice } : {}),
+  };
+}
+
+/**
+ * The repo and revision of a voice catalog on the Hub, or `null` when `source` does not start
+ * with `hf://`. A malformed `hf://` name is an error.
+ *
+ * @param {string | URL} source
+ * @returns {{ repo: string, revision: string } | null}
+ */
+export function parseHubCatalog(source) {
+  if (!String(source).startsWith('hf://')) return null;
+  const match = HUB_SOURCE.exec(source);
+  if (!match) {
+    throw new TypeError(
+      "a voice catalog on the Hub is 'hf://owner/name' or 'hf://owner/name@revision'; " +
+        `got ${JSON.stringify(String(source))}`,
+    );
+  }
+  return { repo: match[1], revision: match[2] ?? 'main' };
+}
+
+/**
+ * The URL of a Hub voice catalog's `voices.jsonl`, pinned to the commit the revision points
+ * at, as `resolveHubModel` pins a model's files. The Hub's answer is cached the same way.
+ *
+ * @param {string} source `hf://owner/name` or `hf://owner/name@revision`
+ * @param {{ cache?: boolean }} [options]
+ * @returns {Promise<string>}
+ */
+export async function resolveHubCatalog(source, { cache = true } = {}) {
+  const { repo, info } = await lookUp(source, parseHubCatalog(source), cache);
+  if (!(info.siblings ?? []).some((s) => s.rfilename === CATALOG_FILE)) {
+    throw new Error(`${source} at ${info.sha} has no ${CATALOG_FILE}`);
+  }
+  return `${HUB}/${repo}/resolve/${info.sha}/${CATALOG_FILE}`;
+}
+
+/** The Hub's answer for `repo` at `revision`: the commit it points at, and the files there. */
+async function lookUp(source, { repo, revision }, cache) {
   const api = `${HUB}/api/models/${repo}/revision/${encodeURIComponent(revision)}`;
   const store = cache ? await openCache() : null;
   let response;
@@ -84,43 +173,6 @@ export async function resolveHubModel(source, { cache = true } = {}) {
     );
   }
   if (!response.ok) throw new Error(`cannot look up ${source}: HTTP ${response.status}`);
-
-  const files = new Set((info.siblings ?? []).map((s) => s.rfilename));
-  const url = (file) =>
-    `${HUB}/${repo}/resolve/${info.sha}/${file.split('/').map(encodeURIComponent).join('/')}`;
-
-  const weights = {};
-  for (const [quant, names] of Object.entries(WEIGHTS)) {
-    const found = names.find((name) => files.has(name));
-    if (found) weights[quant] = url(found);
-  }
-  const missing = ['config.json', 'tokenizer.json'].filter((name) => !files.has(name));
-  if (!weights.q8) missing.push(`weights (${WEIGHTS.q8.join(' or ')})`);
-  if (missing.length > 0) {
-    throw new Error(`${source} at ${info.sha} has no ${missing.join(', ')}`);
-  }
-
-  const voiceFiles = new Map();
-  for (const dir of VOICE_DIRS) {
-    for (const file of files) {
-      if (!file.startsWith(`${dir}/`) || !file.endsWith('.safetensors')) continue;
-      const name = file.slice(dir.length + 1, -'.safetensors'.length);
-      if (name && !name.includes('/') && !voiceFiles.has(name)) voiceFiles.set(name, file);
-    }
-  }
-  if (!voiceFiles.has('default') && files.has(DEFAULT_VOICE_FILE)) {
-    voiceFiles.set('default', DEFAULT_VOICE_FILE);
-  }
   await store?.put(api, new Response(JSON.stringify(info))).catch(() => {});
-
-  const names = [...voiceFiles.keys()].sort();
-  // As the native `default_voice`: `default` if there is one, else the first by name.
-  const defaultVoice = voiceFiles.has('default') ? 'default' : names[0];
-  return {
-    weights,
-    tokenizer: url('tokenizer.json'),
-    config: url('config.json'),
-    voices: Object.fromEntries(names.map((name) => [name, url(voiceFiles.get(name))])),
-    ...(defaultVoice ? { defaultVoice } : {}),
-  };
+  return { repo, info };
 }
