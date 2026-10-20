@@ -12,6 +12,7 @@ enum Currency {
     Pound,
     Yen,
     Cent,
+    Real,
 }
 
 impl Currency {
@@ -48,6 +49,7 @@ impl Currency {
             (Self::Cent, Lang::En | Lang::Fr) => ("cent", "cents"),
             (Self::Cent, Lang::De) => ("Cent", "Cent"),
             (Self::Cent, Lang::Es | Lang::Pt) => ("centavo", "centavos"),
+            (Self::Real, _) => ("real", "reais"),
         }
     }
 }
@@ -67,17 +69,15 @@ pub(super) fn currency(word: &str, lang: Lang) -> Option<String> {
     let (body, suffix) = split_suffix(word);
     // "-$500" reads as "$-500" does.
     if let Some(body) = body.strip_prefix('-')
-        && let Some(amount) = body.strip_prefix(Currency::SYMBOLS)
+        && let Some(amount) = body
+            .strip_prefix(Currency::SYMBOLS)
+            .or_else(|| body.strip_prefix("R$").filter(|_| lang == Lang::Pt))
     {
         let symbol = &body[..body.len() - amount.len()];
         return currency(&format!("{symbol}-{amount}{suffix}"), lang);
     }
     // The symbol leads or trails, never both: "$5€" is not an amount.
-    let (symbol, amount) = match body.strip_prefix(Currency::SYMBOLS) {
-        Some(amount) => (body.chars().next()?, amount),
-        None => (body.chars().next_back()?, body.strip_suffix(Currency::SYMBOLS)?),
-    };
-    let currency = Currency::from_symbol(symbol)?;
+    let (currency, amount) = split_symbol(body, lang)?;
     if let Some((amount, scale)) = split_scale(amount, lang) {
         return with_scale(amount, scale, currency, lang).map(|spoken| format!("{spoken}{suffix}"));
     }
@@ -146,17 +146,33 @@ fn with_scale(amount: &str, scale: &str, currency: Currency, lang: Lang) -> Opti
 pub(super) fn scaled(words: &[&str], lang: Lang) -> Option<(String, usize)> {
     let [word, next, ..] = words else { return None };
     let (scale, suffix) = split_suffix(next);
+    let scale = match (lang, scale) {
+        (Lang::Pt, "bi") => "bilhões",
+        (Lang::Pt, "mi") => "milhões",
+        _ => scale,
+    };
     if !scale_word(scale, lang) {
         return None;
     }
     // "$2 million", or "2 € millions" once the character pass has joined it to "2€ millions".
-    let (symbol, amount) = match word.strip_prefix(Currency::SYMBOLS) {
-        Some(amount) => (word.chars().next()?, amount),
-        None => (word.chars().next_back()?, word.strip_suffix(Currency::SYMBOLS)?),
-    };
-    let currency = Currency::from_symbol(symbol)?;
+    let (currency, amount) = split_symbol(word, lang)?;
     let spoken = with_scale(amount, scale, currency, lang)?;
     Some((format!("{spoken}{suffix}"), 2))
+}
+
+fn split_symbol(word: &str, lang: Lang) -> Option<(Currency, &str)> {
+    if lang == Lang::Pt
+        && let Some(amount) = word.strip_prefix("R$")
+    {
+        return Some((Currency::Real, amount));
+    }
+    match word.strip_prefix(Currency::SYMBOLS) {
+        Some(amount) => Some((Currency::from_symbol(word.chars().next()?)?, amount)),
+        None => {
+            let amount = word.strip_suffix(Currency::SYMBOLS)?;
+            Some((Currency::from_symbol(word.chars().next_back()?)?, amount))
+        }
+    }
 }
 
 fn with_cents(amount: &str, currency: Currency, lang: Lang) -> Option<String> {

@@ -755,6 +755,11 @@ pub fn normalize_text(input: &str, lang: Lang, rules: Rules) -> String {
             {
                 grouped = res.buffer.len() + 3;
             }
+            c if c.is_whitespace()
+                && lang == Lang::Pt
+                && res.buffer.ends_with(&['R', '$'])
+                && chars.peek().is_some_and(char::is_ascii_digit)
+                && chars.clone().find(|c| !c.is_ascii_digit()) != Some('-') => {}
             '…' => res.push('.'),
             '=' => res.push_spoken(lang.special_chars().equals),
             ':' if !prev.is_none_or(char::is_whitespace)
@@ -1078,6 +1083,17 @@ mod tests {
             (Lang::En, "From 10 $20 bills.", "From 10 20 dollars bills."),
             (Lang::Fr, "Le prix en €.", "Le prix en €."),
         ];
+        let reais = [
+            ("O total é de R$ 1.234,56.", "O total é de mil 234 vírgula 56 reais."),
+            ("A taxa é de R$ 250.", "A taxa é de 250 reais."),
+            ("Saldo: -R$ 12,50.", "Saldo, menos 12 vírgula 50 reais."),
+            ("Captamos R$ 3,5 bi no ano.", "Captamos 3 vírgula 5 bilhões de reais no ano."),
+            ("O negócio vale R$1,5 mi.", "O negócio vale 1 vírgula 5 milhões de reais."),
+            ("Fica entre R$ 40-60.", "Fica entre R$ 40 a 60."),
+        ];
+        for (input, expected) in reais {
+            assert_eq!(normalize_text(input, Lang::Pt, Rules::DEFAULT), expected, "{input:?}");
+        }
         for (lang, input, expected) in spaced {
             assert_eq!(normalize_text(input, lang, Rules::DEFAULT), expected, "{input:?}");
         }
