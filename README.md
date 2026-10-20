@@ -107,7 +107,7 @@ Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs 
 
 ## Model setup
 
-Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is currently [`hf://davencyw/pocket-tts-ptts`](https://huggingface.co/davencyw/pocket-tts-ptts), a test copy of Kyutai's [Pocket TTS](https://huggingface.co/kyutai/pocket-tts) (English, CC-BY-4.0), pinned to one commit. Swift and Android load a model bundle you add to the app.
+Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31M, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) (English, Apache 2.0), pinned to one commit. Swift and Android load a model bundle you add to the app.
 
 To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
 
