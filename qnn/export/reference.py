@@ -152,7 +152,7 @@ class FlowLMRef:
         self.tr = TransformerRef(W, "flow_lm.transformer", fl["num_layers"], fl["num_heads"], fl["max_period"], False)
         self.cond = summed_conditions(W, config, {})
         self.steps = config["lsd_decode_steps"]
-        self.times = lsd_times(W, "flow_lm.flow_net", self.steps)
+        self.times = lsd_times(W, "flow_lm.flow_net", self.steps, fl.get("time_rms_norm", "rms_var"))
         self.depth = fl["flow_depth"]
 
     def prompt(self, emb):
