@@ -61,6 +61,8 @@ python -m ptts --lang en "Hello world" -o out.wav
 
 ## Wheels
 
+x86_64 wheels target x86-64-v3 (AVX2, FMA and F16C); older x86 CPUs need a source build.
+
 Released wheels are `cp39-abi3`, so one per platform covers every CPython from 3.9 on, and a
 new CPython release needs no new wheel. Free-threaded CPython and PyPy cannot load an abi3
 extension, so those two install from the sdist and compile the Rust runtime, which needs a
