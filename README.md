@@ -20,8 +20,8 @@ is written in Rust and needs no PyTorch.
 [![Published Python version](https://img.shields.io/pypi/v/ptts?label=PyPI)](https://pypi.org/project/ptts/)
 [![Published npm version](https://img.shields.io/npm/v/phonon-tts?label=npm)](https://www.npmjs.com/package/phonon-tts)
 [![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
-[![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
-[![Android package](https://img.shields.io/badge/Android-QNN%20and%20CPU-blue)](#android)
+[![Swift package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Swift&color=orange)](#swift)
+[![Android package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Android&color=blue)](#android)
 
 [Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
 
