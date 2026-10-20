@@ -212,38 +212,40 @@ def summed_conditions(W, config: dict, values: dict) -> torch.Tensor:
 # ---- flow net ----
 
 
-def rms_norm_xn(x, alpha, eps=1e-5):
-    """`TimestepEmbedder`'s norm as `mlp.rs` computes it: x / sqrt(biased var + eps) * alpha * sqrt((n-1)/n)."""
-    n = x.shape[-1]
-    var = x.var(-1, unbiased=False, keepdim=True)
-    return x / torch.sqrt(var + eps) * alpha * math.sqrt((n - 1) / n)
+def time_norm(x, alpha, kind: str, eps=1e-5):
+    """`TimestepEmbedder`'s norm as `mlp.rs` computes it, the config's `flow_lm.time_rms_norm`:
+    `rms` is x / sqrt(mean(x^2) + eps) * alpha, `rms_var` (the default) x / sqrt(unbiased var + eps) * alpha."""
+    if kind == "rms":
+        return x / torch.sqrt(x.pow(2).mean(-1, keepdim=True) + eps) * alpha
+    assert kind == "rms_var", f"unknown time_rms_norm {kind!r}"
+    return x / torch.sqrt(x.var(-1, unbiased=True, keepdim=True) + eps) * alpha
 
 
-def timestep_embedding(W, prefix, t: float) -> torch.Tensor:
+def timestep_embedding(W, prefix, t: float, norm: str) -> torch.Tensor:
     freqs = W[f"{prefix}.freqs"]
     args = torch.tensor(t, dtype=torch.float32) * freqs
     emb = torch.cat([args.cos(), args.sin()])
     x = F.silu(emb @ W[f"{prefix}.mlp.0.weight"].T + W[f"{prefix}.mlp.0.bias"])
     x = x @ W[f"{prefix}.mlp.2.weight"].T + W[f"{prefix}.mlp.2.bias"]
-    return rms_norm_xn(x, W[f"{prefix}.mlp.3.alpha"])
+    return time_norm(x, W[f"{prefix}.mlp.3.alpha"], norm)
 
 
-def lsd_times(W, prefix, steps: int) -> torch.Tensor:
+def lsd_times(W, prefix, steps: int, norm: str) -> torch.Tensor:
     """The flow net's time conditioning for each LSD step, [steps, C]: the mean of the
     two time embedders at s = i / steps and t = (i + 1) / steps (`flow_lm::lsd_decode`)."""
     rows = []
     for i in range(steps):
         s, t = i / steps, (i + 1) / steps
-        rows.append((timestep_embedding(W, f"{prefix}.time_embed.0", s) + timestep_embedding(W, f"{prefix}.time_embed.1", t)) / 2)
+        rows.append((timestep_embedding(W, f"{prefix}.time_embed.0", s, norm) + timestep_embedding(W, f"{prefix}.time_embed.1", t, norm)) / 2)
     return torch.stack(rows)
 
 
 class FlowNet(nn.Module):
     """SimpleMLPAdaLN (`mlp.rs`) with its time conditioning precomputed."""
 
-    def __init__(self, W, prefix: str, depth: int, steps: int):
+    def __init__(self, W, prefix: str, depth: int, steps: int, norm: str = "rms_var"):
         super().__init__()
-        self.register_buffer("times", lsd_times(W, prefix, steps))
+        self.register_buffer("times", lsd_times(W, prefix, steps, norm))
         self.steps = steps
         self.cond_embed = linear(W, f"{prefix}.cond_embed")
         self.input_proj = linear(W, f"{prefix}.input_proj")
@@ -291,7 +293,9 @@ class FlowHead(nn.Module):
         fl = config["flow_lm"]
         self.out_norm = layer_norm(W, "flow_lm.out_norm", 1e-5)
         self.out_eos = linear(W, "flow_lm.out_eos")
-        self.flow_net = FlowNet(W, "flow_lm.flow_net", fl["flow_depth"], config["lsd_decode_steps"])
+        self.flow_net = FlowNet(
+            W, "flow_lm.flow_net", fl["flow_depth"], config["lsd_decode_steps"], fl.get("time_rms_norm", "rms_var")
+        )
         self.input_linear = linear(W, "flow_lm.input_linear", bias=False)
 
     def forward(self, x, noise):
