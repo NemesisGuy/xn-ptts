@@ -1,7 +1,7 @@
 /** Text-normalization language. `'none'` hands text to the tokenizer as written. */
 export type Lang = 'en' | 'fr' | 'de' | 'es' | 'pt' | 'none';
 
-/** Weight format. `q8` is smaller (~146 MB against ~240 MB) and faster on CPU. */
+/** Weight format. `q8` is smaller and faster on CPU. */
 export type Quant = 'f32' | 'q8';
 
 /** Where a checkpoint's files are. Relative URLs resolve against the page. */

@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 /// reproducible. Loading it needs the `hub` feature. The browser package keeps a copy in
 /// `ptts-wasm/js/hub.js`, which its tests hold to this one.
 pub const DEFAULT_MODEL: &str =
-    "hf://davencyw/pocket-tts-ptts@7cc3c90b88f3e6617ded1b9b74100d1cd0162d90";
+    "hf://gradium/phonon-31m-en@8c64b55ec301728e2d1695bfea87a08a267d0c2d";
 
 /// Standard weight filenames, ordered by the requested quantization.
 pub fn weight_candidates(quant: Quant) -> [&'static str; 2] {

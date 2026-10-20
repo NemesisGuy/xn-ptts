@@ -619,7 +619,7 @@ mod tests {
     #[test]
     fn gelu_defaults_to_erf_except_for_pocket_tts_checkpoints() {
         use crate::transformer::Gelu;
-        // No `model_id`: a Pocket TTS checkpoint, such as the default model, trained with tanh.
+        // No `model_id`: a Pocket TTS checkpoint, trained with tanh.
         let pocket = crate::test_config();
         assert!(pocket.model_id.is_none() && pocket.flow_lm.gelu.is_none());
         assert_eq!(pocket.default_gelu(), Gelu::Tanh);
