@@ -69,7 +69,7 @@ byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs 
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
 - On one MacBook Air core, Phonon 40M reaches 20x real time with a 7 ms TTFB. Kokoro (82M), through
-  its own PyTorch package on the same core, reaches 7.3x with 776 ms, since it makes the whole
+  its own PyTorch package on the same core, reaches 7.3x with a 776 ms TTFB, since it makes the whole
   sentence before returning any audio.
 
 ## Choose an integration
@@ -160,7 +160,7 @@ brew install gradium-ai/tap/ptts
 ```
 
 You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your
-`PATH`. Neither path needs Python or Rust. Generate a WAV:
+`PATH`. Neither path needs Python or Rust. Generate a mono 24 kHz WAV:
 
 ```sh
 ptts --lang en "Hello from Phonon." -o speech.wav
@@ -326,6 +326,8 @@ Start the speech server, which downloads the default model on first start:
 ```sh
 docker run --rm -p 127.0.0.1:8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 ghcr.io/gradium-ai/ptts-openai-server:latest
 ```
+
+`latest` follows the newest release; for a repeatable deployment, use a version tag such as `0.4.0`.
 
 In a second terminal:
 
