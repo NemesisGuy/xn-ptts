@@ -105,13 +105,9 @@ The Phonon models on Hugging Face:
 
 | Model | Hugging Face repo | Languages | License |
 |---|---|---|---|
-| Phonon 31M | [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) | English | Apache 2.0 |
-| Phonon 40M | [`hf://gradium/phonon-40m-en`](https://huggingface.co/gradium/phonon-40m-en) | English | CC BY-NC 4.0 |
-| Phonon 40M | [`hf://gradium/phonon-40m-fr`](https://huggingface.co/gradium/phonon-40m-fr) | French | CC BY-NC 4.0 |
-| Phonon 40M | [`hf://gradium/phonon-40m-de`](https://huggingface.co/gradium/phonon-40m-de) | German | CC BY-NC 4.0 |
-| Phonon 40M | [`hf://gradium/phonon-40m-es`](https://huggingface.co/gradium/phonon-40m-es) | Spanish | CC BY-NC 4.0 |
-| Phonon 40M | [`hf://gradium/phonon-40m-pt`](https://huggingface.co/gradium/phonon-40m-pt) | Portuguese | CC BY-NC 4.0 |
-| Phonon 40M multilingual | [`hf://gradium/phonon-40m-multilingual`](https://huggingface.co/gradium/phonon-40m-multilingual) | English, French, German, Spanish, Portuguese | CC BY-NC 4.0 |
+| Phonon 31M | [`gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) | English | Apache 2.0 |
+| Phonon 40M | `gradium/phonon-40m-`[`en`](https://huggingface.co/gradium/phonon-40m-en), [`fr`](https://huggingface.co/gradium/phonon-40m-fr), [`de`](https://huggingface.co/gradium/phonon-40m-de), [`es`](https://huggingface.co/gradium/phonon-40m-es), [`pt`](https://huggingface.co/gradium/phonon-40m-pt) | English, French, German, Spanish, Portuguese: one model each | CC BY-NC 4.0 |
+| Phonon 40M multilingual | [`gradium/phonon-40m-multilingual`](https://huggingface.co/gradium/phonon-40m-multilingual) | the same five, in one model | CC BY-NC 4.0 |
 
 Phonon 31M is public. The Phonon 40M models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31M from Hugging Face. To use a Phonon 40M model in a browser, download its files and serve them with your app, under the model's license.
 
