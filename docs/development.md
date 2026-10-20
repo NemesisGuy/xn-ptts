@@ -1,6 +1,6 @@
 # Build and develop Phonon
 
-The root [README](../README.md) covers the consumer integrations. This guide is for building the current checkout, testing a supplied checkpoint, and preparing packages before public release.
+The root [README](../README.md) covers the consumer integrations. This guide is for building the current checkout, testing a checkpoint, and preparing release packages.
 
 ## Model setup
 
@@ -113,7 +113,7 @@ Use a path dependency while working from this checkout:
 ptts = { path = "/absolute/path/to/xn-ptts/ptts", features = ["hf"] }
 ```
 
-Run the consumer with `cargo run --release`. The `hf` feature enables the JSON tokenizer; `audio` adds audio-file decoding for voice creation. The library itself does not download checkpoints. [Rust guide](../ptts/README.md).
+Run the consumer with `cargo run --release`. The `hf` feature enables the JSON tokenizer; `audio` adds audio-file decoding for voice creation. `hub` downloads `hf://` models; without it, the library reads local folders only. [Rust guide](../ptts/README.md).
 
 ## Checks
 

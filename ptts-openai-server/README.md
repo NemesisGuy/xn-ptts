@@ -20,19 +20,19 @@ docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
 
 The image contains the server and no model weights. It is built for `linux/amd64` and `linux/arm64`. On an x86 CPU without AVX2 it runs a slower build made for such CPUs, and says so when it starts. Every model supplies its own `config.json` and `tokenizer.json`.
 
-To serve another model from HF, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`. Set `HF_TOKEN` for a private repo. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
+To serve another model from HF, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`, for example `PTTS_MODEL=hf://gradium/phonon-40m-fr` with `PTTS_LANG=fr`. Set `HF_TOKEN` for a gated or private repo. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page first. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
 
 The Hub Compose file serves the default model, or the one `PTTS_MODEL` names:
 
 ```bash
 export PTTS_LANG=en
-# Optional: export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA, and HF_TOKEN for a private repo.
+# Optional: export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA, and HF_TOKEN for a gated or private repo.
 docker compose -f ptts-openai-server/compose.hub.yaml up
 ```
 
 The Hub Compose file requires an image release that includes this writable cache directory; earlier images may create a cache mount owned by root. Without `@COMMIT_SHA` the repo's `main` is used, so the cache retains files but does not freeze the checkpoint version. Set a commit for a fixed checkpoint.
 
-The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. `PTTS_MODEL` and the default model need an image newer than `0.4.0-rc.1`, which reads `PTTS_CONFIG` and `PTTS_REVISION` instead and has no default. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
+The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
 
 Every flag below has an environment variable, so the image is configured with `-e`. Additional voices can be mounted with `-v ./voices:/voices:ro -e PTTS_VOICE_DIR=/voices`. The server also serves the voices of a voice catalog that are in its language, `PTTS_LANG`. The catalog is [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices), downloaded on first start and cached, unless `PTTS_VOICE_CATALOG` names another: an `hf://owner/name[@revision]` repo, or a local JSONL file with one `{"name", "filename"}` object per line and `filename` relative to the catalog, such as `/voices/voices.jsonl`. An empty `PTTS_VOICE_CATALOG` serves only the checkpoint's voices. [compose.yaml](compose.yaml) mounts the folder named by `MODEL_DIR`:
 
@@ -99,7 +99,7 @@ Aliases match in any case, like voice names. A name that is neither a voice nor 
 
 ```bash
 docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   -e PTTS_OPENAI_VOICES=default -e PTTS_VOICE_ALIAS=nova=VOICE \
   -e PTTS_IGNORE_SPEED=true \
   ghcr.io/gradium-ai/ptts-openai-server

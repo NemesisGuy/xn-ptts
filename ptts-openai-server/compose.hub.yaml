@@ -1,5 +1,6 @@
 # PTTS_LANG=en docker compose -f ptts-openai-server/compose.hub.yaml up
 # Serves the default model; set PTTS_MODEL=hf://owner/name[@revision] for another one.
+# A gated model, such as hf://gradium/phonon-40m-fr, also needs HF_TOKEN set on the host.
 services:
   ptts-openai-server:
     image: "${PTTS_IMAGE:-ghcr.io/gradium-ai/ptts-openai-server:latest}"
@@ -16,7 +17,7 @@ services:
       # For clients that only offer OpenAI's voice names or always send a speed.
       # PTTS_OPENAI_VOICES: default
       # PTTS_IGNORE_SPEED: "true"
-      # Pass through authentication only when it is set on the host.
+      # Pass through HF_TOKEN when it is set on the host. Gated and private models need it.
       HF_TOKEN:
       HF_HOME: /home/phonon/.cache/huggingface
     volumes:

@@ -37,19 +37,17 @@ dependencies: [
 dependencies: [.product(name: "ptts", package: "xn-ptts")],
 ```
 
-Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum. Releases up to 0.4.0-rc.2 came before it: use the archive below for those.
-
-For a pre-release such as `0.4.0-rc.3`, use `exact: "0.4.0-rc.3"`: a `from:` range skips pre-release versions.
+Each release tag has a `Package.swift` at the repository root. It downloads that release's compiled core, `PhononCore.xcframework.zip`, and checks it against its exact checksum.
 
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
-You still need a prepared Core ML model bundle supplied with the selected checkpoint. If you already received one from us, use it directly with the release package and skip the model export below. No public HF repo or token is needed. If you received only a raw checkpoint, export it first. You can download a hosted Core ML bundle with `PhononModels.download(from:progress:)` or bundle it with the app as described below. Prepared public model bundles will be supplied when the model is released.
+You still need a Core ML model bundle. Export one from a Phonon model on Hugging Face with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows. With the released package, you can skip building the framework there. Bundle the exported folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
 
 Source development uses this folder's `Package.swift` and the local framework built by `ios/build-xcframework.sh`. The root `Package.swift` always fetches a released framework, so on `main` it can lag behind these sources.
 
 ## 1. Build the two pieces that are not in the source
 
-From the root of a checkout, with Rust installed (or use the copies you were given):
+From the root of a checkout, with Rust installed:
 
 ```bash
 ./ios/build-xcframework.sh                                                          # PhononCore.xcframework
@@ -57,8 +55,13 @@ cargo run --release -p ptts --example export_coreml --features hub -- phonon-cor
 ```
 
 The first is the compiled core the package wraps, written into `ios/PhononTTS` where the package
-expects it. The second converts the model folder you were given, the one with `config.json` and
-`model.q8.gguf`. If that model takes conditions, such as `padding_bonus`, set them here with
+expects it. The second downloads the default model, Phonon 31M, from Hugging Face and exports it
+as Core ML. For another model, add `--model`: a Hugging Face repo, such as
+`--model hf://gradium/phonon-40m-fr`, or a local checkpoint folder with `config.json` and the
+weights. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page, then
+set `HF_TOKEN` or run `hf auth login` before exporting.
+
+If the model takes conditions, such as `padding_bonus`, set them here with
 `--condition padding_bonus=0.5` (repeatable): they are fixed in the exported folder, and those not
 given take their defaults.
 
@@ -139,4 +142,5 @@ The first two rows differ because iOS lowers the CPU's clock while an app is idl
 ## Licensing
 
 The code is MIT or Apache-2.0, like the rest of the repository. The Phonon model weights are not
-part of this repository and are covered by the terms they were provided under.
+part of this repository and have their own licenses: Phonon 31M is under Apache 2.0, and Phonon
+40M and Phonon 40M multilingual are under CC BY-NC 4.0. See each model's page on Hugging Face.

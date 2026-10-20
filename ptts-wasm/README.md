@@ -61,7 +61,7 @@ The package version is not in `js/package.json`. `pack.mjs` stamps it from `work
 
 `.github/workflows/npm-publish.yml` builds the package on every PR that touches it. It publishes on a `v*` tag, the same tag that publishes the Python wheels. It uses npm trusted publishing, so no token is stored here.
 
-That has to be enabled once for `phonon-tts` on npmjs.com, pointed at this repository and at `npm-publish.yml`. npm only offers the setting for a package that is already on the registry; `phonon-tts` is, as a placeholder, so it can be set up before the first real release. Until it is, a `v*` tag publishes the wheels and fails here, leaving PyPI and npm on different versions.
+Trusted publishing is enabled for `phonon-tts` on npmjs.com, pointed at this repository and at `npm-publish.yml`. Renaming that workflow file breaks publishing until the setting on npmjs.com is updated to match.
 
 Supply the checkpoint URLs through `ModelSpec`, or name a public Hugging Face repo as `hf://owner/name@revision`. Use pinned HF revisions or versioned local paths because files are cached by URL; an `hf://` model is pinned to the commit its revision points at. Every checkpoint must supply its config and tokenizer JSON.
 

@@ -14,7 +14,7 @@ const wav = await tts.synthWav('Hello from your own browser.');
 new Audio(URL.createObjectURL(wav)).play();
 ```
 
-Without `model`, `load` uses the default model, `DEFAULT_MODEL`, from the Hugging Face Hub. See [The model](#the-model) below for another one.
+Without `model`, `load` uses the default model, `DEFAULT_MODEL`, from the Hugging Face Hub: Phonon 31M, which speaks English. See [The model](#the-model) below for another one.
 
 The first `load` downloads the files, whose size depends on the checkpoint. They are kept in the browser's Cache API, so later page loads start from disk.
 
@@ -97,7 +97,7 @@ Requests on one instance run one at a time, in the order they were made.
 
 ## The model
 
-`model` says where a checkpoint's files are. Relative URLs resolve against the page. Left out, it is `DEFAULT_MODEL`, which the package exports: a public Hugging Face repo pinned to a commit.
+`model` says where a checkpoint's files are. Relative URLs resolve against the page. Left out, it is `DEFAULT_MODEL`, which the package exports: Phonon 31M (English), a public Hugging Face repo pinned to a commit.
 
 ```js
 await PhononTTS.load({
@@ -117,10 +117,10 @@ await PhononTTS.load({
 A public Hugging Face repo can be named instead, as `hf://owner/name` or `hf://owner/name@revision` (a branch, tag or commit; `main` when left out):
 
 ```js
-await PhononTTS.load({ lang: 'en', model: 'hf://owner/name@COMMIT_SHA' });
+await PhononTTS.load({ lang: 'en', model: 'hf://gradium/phonon-31m-en@COMMIT_SHA' });
 ```
 
-One request to the Hub finds the commit and the repo's files, and every file URL is pinned to that commit, so a cached file is never served after the repo changes. The files are picked as the native frontends pick them: `config.json`, `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, and voices under `voices/` or `embeddings/` plus `default-voice.safetensors` as `default`. The Hub's answer is cached too, so a model loaded once also loads offline, or while the Hub fails; a branch then means the commit it pointed at when last looked up. Private and gated repos cannot be loaded this way: the browser has no token to send.
+One request to the Hub finds the commit and the repo's files, and every file URL is pinned to that commit, so a cached file is never served after the repo changes. The files are picked as the native frontends pick them: `config.json`, `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, and voices under `voices/` or `embeddings/` plus `default-voice.safetensors` as `default`. The Hub's answer is cached too, so a model loaded once also loads offline, or while the Hub fails; a branch then means the commit it pointed at when last looked up. Private and gated repos cannot be loaded this way: the browser has no token to send. That includes the Phonon 40M models. To use one, accept its terms on its Hugging Face page, download its files, and serve them with your app through a `ModelSpec` as above, under the model's license.
 
 Every model needs its own `config.json` and `tokenizer.json`. Supply their URLs in `ModelSpec`, or a repo that has them; the package has no model or config fallback. Pocket TTS checkpoints work through this same interface when they supply those files and compatible weights.
 
@@ -158,4 +158,4 @@ This build speaks with ready-made voices only. Cloning a voice from an audio sam
 
 ## Licence
 
-The package is MIT OR Apache-2.0. Model weights are not part of it and come with their own license.
+The package is MIT OR Apache-2.0. Model weights are not part of it and come with their own licenses: Phonon 31M is under Apache 2.0, and Phonon 40M and Phonon 40M multilingual are under CC BY-NC 4.0. See each model's page on Hugging Face.

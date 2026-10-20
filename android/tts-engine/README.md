@@ -28,8 +28,9 @@ The APK carries `arm64-v8a` for phones and `x86_64` for emulators on x86 machine
 
 ## Install a model
 
-There is no model in the APK. Open the Phonon TTS app, tap "Import a checkpoint folder", and pick
-a folder holding the files [the Android guide lists](../README.md#2-get-a-model): `config.json`,
+There is no model in the APK. Download a Phonon model from Hugging Face first, as
+[the Android guide](../README.md#2-get-a-model) describes. Then open the Phonon TTS app, tap
+"Import a checkpoint folder", and pick a folder holding the files the guide lists: `config.json`,
 `tokenizer.json`, `model.q8.gguf` (or `model.safetensors`), and optionally `voices/` and
 `default-voice.safetensors`. The app copies them into its own storage and loads the model. Android
 does not let an app pick the top of `Download` itself, so put the files in a folder inside it.

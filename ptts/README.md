@@ -1,8 +1,8 @@
 # ptts
 
-Phonon is Gradium's on-device text-to-speech runtime. The `ptts` crate provides its Rust API and an optional `ptts` command. The code is licensed under MIT OR Apache-2.0; model and voice licenses are separate.
+Phonon is Gradium's on-device text-to-speech runtime. The `ptts` crate provides its Rust API and an optional `ptts` command. The code is licensed under MIT OR Apache-2.0. The models have their own licenses: Phonon 31M is under Apache 2.0, and Phonon 40M and Phonon 40M multilingual are under CC BY-NC 4.0. Voices have their own terms.
 
-Each checkpoint supplies its own `config.json`, `tokenizer.json`, weights, and voice assets. The command and `Checkpoint::locate` with `ptts::checkpoint::DEFAULT_MODEL` use the default model, downloaded from Hugging Face on first use. The library downloads only with the `hub` feature, when given an `hf://` source.
+Each checkpoint supplies its own `config.json`, `tokenizer.json`, weights, and voice assets. The command and `Checkpoint::locate` with `ptts::checkpoint::DEFAULT_MODEL` use the default model, Phonon 31M, downloaded from Hugging Face on first use. The library downloads only with the `hub` feature, when given an `hf://` source.
 
 See the [CLI guide](https://github.com/gradium-ai/xn-ptts/blob/main/docs/cli.md) for desktop downloads and platform requirements.
 
@@ -19,9 +19,9 @@ ptts --lang en "Hello world" -o out.wav
 
 Or install the prebuilt CPU command with `cargo binstall ptts`. It uses the desktop download for your platform, with the same requirements.
 
-Without `--model` the command uses the default model. `--model /path/to/model` loads a local checkpoint, `--model hf://<owner>/<model>` another one from Hugging Face, and `--model hf://<owner>/<model>@<commit>` pins all its files to that revision. For private models, set `HF_TOKEN` or log in with the Hugging Face CLI. `ptts --help` lists all options.
+Without `--model` the command uses the default model. `--model /path/to/model` loads a local checkpoint, `--model hf://<owner>/<model>` another one from Hugging Face, such as `hf://gradium/phonon-40m-fr`, and `--model hf://<owner>/<model>@<commit>` pins all its files to that revision. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. For gated and private models, set `HF_TOKEN` or log in with `hf auth login`. `ptts --help` lists all options.
 
-`--lang` is required: `en`, `fr`, `de`, `es`, `pt`, or `none` to disable normalization. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. `--quant q8` keeps q8 GGUF weights quantized on CPU; omit it for f32 weights.
+`--lang` is required: `en`, `fr`, `de`, `es`, `pt`, or `none` to disable normalization. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. Phonon 31M speaks English. Phonon 40M comes as one model per language, and Phonon 40M multilingual speaks English, French, German, Spanish and Portuguese. `--quant q8` keeps q8 GGUF weights quantized on CPU; omit it for f32 weights.
 
 The Python package also installs a command named `ptts`, with the same `--model`. When both are installed, `PATH` order selects the command. Use `python -m ptts` with your Python environment's interpreter to invoke Python explicitly.
 

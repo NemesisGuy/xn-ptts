@@ -20,7 +20,7 @@
 //!     Lang::En,
 //! )
 //! .tokenizer_file("model/tokenizer.json")
-//! .add_voice("alba", "model/voices/alba.safetensors")
+//! .add_voice("default", "model/default-voice.safetensors")
 //! .build()?;
 //! let pcm = tts.say("Hello world")?;
 //! ptts::wav::write_wav_file("out.wav", &pcm, tts.sample_rate())?;

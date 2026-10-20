@@ -19,19 +19,11 @@ is written in Rust and needs no PyTorch.
 [![Published Rust version](https://img.shields.io/crates/v/ptts?label=crates.io)](https://crates.io/crates/ptts)
 [![Published Python version](https://img.shields.io/pypi/v/ptts?label=PyPI)](https://pypi.org/project/ptts/)
 [![Published npm version](https://img.shields.io/npm/v/phonon-tts?label=npm)](https://www.npmjs.com/package/phonon-tts)
-[![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?include_prereleases&label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
+[![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
 [![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
 [![Android QNN package](https://img.shields.io/badge/Android-QNN%20source%20preview-blue)](#android)
 
 [Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
-
-> **Runtime preview available:** Python, Rust, browser packages, and native
-> downloads are published. See the [runtime preview
-> release](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) for
-> installation instructions. The unversioned registry commands below target the
-> upcoming stable release and currently select older packages. Phonon model
-> files are available separately from the runtime packages. Docker public access
-> is being finalized.
 
 ## Try it
 
@@ -41,16 +33,16 @@ With [uv](https://docs.astral.sh/uv/), one line writes a WAV:
 uvx ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
-The first run downloads the default model and caches it. To run the runtime
-preview now, use `uvx --prerelease allow ptts`. See [Model setup](#model-setup)
-to use another model.
+The first run downloads the default model and caches it. See [Model
+setup](#model-setup) to use another model.
 
 ## What you get
 
-- **Small enough to ship:** Choose a 31m, or 40m parameters model. Each can ship
+- **Small enough to ship:** Choose Phonon 31M or Phonon 40M. Each can ship
   inside a mobile app or load in a browser tab.
-- **Five languages in one model:** Speak English, French, German, Spanish, and
-  Portuguese, with more languages planned.
+- **Five languages:** Speak English, French, German, Spanish, and Portuguese,
+  with more languages planned. Phonon 40M multilingual speaks all five in one
+  model. Phonon 40M also comes as one model per language.
 - **Fast across devices:** A custom inference stack runs in browsers and on
   phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN
   preview for supported Snapdragon NPUs, and GPU support. Multiple backends
@@ -68,7 +60,7 @@ Two model sizes, one inference stack. Each cell is how many seconds of audio Pho
 second of compute (higher is faster; above 1x is faster than real time) and the time to first
 byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs on the accelerator.
 
-| Device | 31m | 40m |
+| Device | Phonon 31M | Phonon 40M |
 |---|---|---|
 | MacBook Air M5, CPU + KleidiAI, 1 core | 26x · 5 ms | 20x · 7 ms |
 | MacBook Air M5, CPU + KleidiAI, 4 cores | 41x · 6 ms | 39x · 8 ms |
@@ -79,7 +71,7 @@ byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs 
   a Raspberry Pi 5.
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
-- On one MacBook Air core, the 40M model runs at 20x real time with a 7 ms TTFB.
+- On one MacBook Air core, Phonon 40M runs at 20x real time with a 7 ms TTFB.
   Kokoro (82M), run through its own PyTorch package on the same core, runs at
   7.3x with a 776 ms TTFB. Kokoro does not stream: it makes the whole sentence
   before returning any audio, so its TTFB is the time for the full sentence.
@@ -94,7 +86,7 @@ Each goal links to its quickstart below.
 | [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a prepared Core ML bundle. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle, exported from a Phonon model. [Swift guide](ios/PhononTTS/README.md). |
 | [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
@@ -109,7 +101,21 @@ Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs 
 
 Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31M, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) (English, Apache 2.0), pinned to one commit. Swift and Android load a model bundle you add to the app.
 
-To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos require `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
+The Phonon models on Hugging Face:
+
+| Model | Hugging Face repo | Languages | License |
+|---|---|---|---|
+| Phonon 31M | [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) | English | Apache 2.0 |
+| Phonon 40M | [`hf://gradium/phonon-40m-en`](https://huggingface.co/gradium/phonon-40m-en) | English | CC BY-NC 4.0 |
+| Phonon 40M | [`hf://gradium/phonon-40m-fr`](https://huggingface.co/gradium/phonon-40m-fr) | French | CC BY-NC 4.0 |
+| Phonon 40M | [`hf://gradium/phonon-40m-de`](https://huggingface.co/gradium/phonon-40m-de) | German | CC BY-NC 4.0 |
+| Phonon 40M | [`hf://gradium/phonon-40m-es`](https://huggingface.co/gradium/phonon-40m-es) | Spanish | CC BY-NC 4.0 |
+| Phonon 40M | [`hf://gradium/phonon-40m-pt`](https://huggingface.co/gradium/phonon-40m-pt) | Portuguese | CC BY-NC 4.0 |
+| Phonon 40M multilingual | [`hf://gradium/phonon-40m-multilingual`](https://huggingface.co/gradium/phonon-40m-multilingual) | English, French, German, Spanish, Portuguese | CC BY-NC 4.0 |
+
+Phonon 31M is public. The Phonon 40M models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31M from Hugging Face. To use a Phonon 40M model in a browser, download its files and serve them with your app, under the model's license.
+
+To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos also need `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
 
 A checkpoint folder looks like this:
 
@@ -155,33 +161,23 @@ uv run scripts/download-voice.py VOICE_ID -o voice.safetensors
 # Clone a voice from a recording; 10 seconds of clear speech are used
 uv run scripts/clone-voice.py speaker.wav --lang en -o voice.safetensors
 
-ptts --model hf://OWNER/MODEL --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
+ptts --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
 ```
 
 To use a voice by name in Python and the servers too, save it in the checkpoint folder's `voices/`: `-o model/voices/NAME.safetensors` adds the voice `NAME`. A cloned voice is also saved in your Gradium account, so `download-voice.py` can fetch it again by the ID `clone-voice.py` prints. Clone a voice only with the speaker's consent.
 
 ## Quickstart
 
-These examples use the default model. The install commands below target the
-upcoming stable release; to install the runtime preview now, follow the [release
-instructions](https://github.com/gradium-ai/xn-ptts/releases/tag/v0.4.0-rc.3) or
-the [source setup](docs/development.md).
+These examples use the default model.
 
 ### Command line
 
 <details>
 <summary>Show command line quickstart</summary>
 
-[uv](https://docs.astral.sh/uv/) can run the Python command in an isolated environment:
-
-```sh
-uvx ptts --lang en "Hello from Phonon." -o speech.wav
-```
-
-`uvx` manages the Python environment and dependencies.
-
-On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
-tap. It currently installs the `0.4.0-rc.3` runtime preview:
+With [uv](https://docs.astral.sh/uv/), `uvx ptts` runs the command without
+installing it, as in [Try it](#try-it). On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
+tap:
 
 ```sh
 brew install gradium-ai/tap/ptts
@@ -199,14 +195,15 @@ The output is a mono 24 kHz WAV. Open it in your audio player.
 If you prefer Cargo, install the command with `cargo install ptts --locked --features cli`.
 
 To use another model, pass a local folder or a Hugging Face repo, and `--quant
-q8` for faster q8 weights on the CPU:
+q8` for faster q8 weights on the CPU. For example, Phonon 40M in French, a gated
+model (see [Model setup](#model-setup)):
 
 ```sh
-ptts --model hf://OWNER/MODEL@COMMIT_SHA --lang en --quant q8 \
-  "Hello from Phonon." -o speech.wav
+ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 \
+  "Bonjour, ici Phonon." -o speech.wav
 ```
 
-Use `--voice NAME` to choose a voice; omitting it uses the model's default selection. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
+Use `--voice NAME` to choose a voice, from the model or the [voice catalog](#voices); omitting it uses the model's default voice. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
 
 </details>
 
@@ -239,7 +236,7 @@ with tts.stream("Speech can play while the rest is being generated.") as audio:
         print(pcm.shape)
 ```
 
-Leaving the `with` block stops generation and releases its workers. To use another model, pass a local folder or `"hf://OWNER/MODEL@COMMIT_SHA"` as the first argument.
+Leaving the `with` block stops generation and releases its workers. To use another model, pass a local folder or a Hugging Face repo as the first argument, for example `ptts.TTS("hf://gradium/phonon-40m-fr", lang="fr")`.
 
 The wheel also provides a command:
 
@@ -273,6 +270,8 @@ const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 
 `model` picks another one: a public Hugging Face repo as
 `'hf://OWNER/MODEL@COMMIT_SHA'`, or the URLs of files you serve with your app.
+The browser cannot load gated repos, so the Phonon 40M models load only from
+files you serve.
 
 Use the returned `Blob` for a download link or your audio player.
 `tts.stream(text)` yields mono `Float32Array` chunks for streaming playback; the
@@ -295,10 +294,11 @@ Threading and WebGPU setup are covered in the [browser guide
 In Xcode, choose *File, Add Package Dependencies*, enter
 `https://github.com/gradium-ai/xn-ptts.git`, and select the **`ptts`** library
 product. Swift Package Manager downloads the matching compiled framework. This
-path needs no Rust build. Releases up to 0.4.0-rc.2 instead ship the package as
-`ptts-swift-<version>.zip`: extract it and add the folder as a local package.
+path needs no Rust build.
 
-Add the prepared Core ML model bundle to your app as a folder reference named `Models`:
+Export a Core ML model bundle with `export_coreml`, as the [Swift
+guide](ios/PhononTTS/README.md) shows, and add it to your app as a folder
+reference named `Models`:
 
 ```swift
 import Foundation
@@ -313,7 +313,7 @@ let player = try PhononPlayer()
 try await player.play(tts.stream("Hello from Phonon."))
 ```
 
-Keep `tts` and `player` in your app's state while audio plays. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. The public Core ML model bundle is still being prepared. [Swift guide and Stop example →](ios/PhononTTS/README.md)
+Keep `tts` and `player` in your app's state while audio plays. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. [Swift guide and Stop example →](ios/PhononTTS/README.md)
 
 </details>
 
@@ -373,9 +373,9 @@ curl http://localhost:8880/v1/audio/speech \
   -o speech.wav
 ```
 
-For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice the model has (`GET /v1/audio/voices` lists them). The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
+For applications with an OpenAI-compatible TTS setting, use `http://localhost:8880/v1` as the base URL and a voice the server has (`GET /v1/audio/voices` lists them). The [server guide](ptts-openai-server/README.md) includes client setup recipes, supported formats, and limits.
 
-For a download cache that survives container replacement, use the [Hub Compose file](ptts-openai-server/compose.hub.yaml). Set `PTTS_MODEL` to serve another model: `hf://OWNER/MODEL@COMMIT_SHA`, or a folder mounted into the container. The image contains no model weights. Deployment and access controls are in the [server guide →](ptts-openai-server/README.md).
+For a download cache that survives container replacement, use the [Hub Compose file](ptts-openai-server/compose.hub.yaml). Set `PTTS_MODEL` to serve another model: `hf://OWNER/MODEL@COMMIT_SHA`, or a folder mounted into the container. For a gated model, such as `hf://gradium/phonon-40m-fr`, also set `HF_TOKEN`. The image contains no model weights. Deployment and access controls are in the [server guide →](ptts-openai-server/README.md).
 
 </details>
 
@@ -423,22 +423,23 @@ Report bugs or request integrations through [GitHub Issues](https://github.com/g
 
 ## Acknowledgements
 
-Phonon builds on the ground-breaking work on Continuous Audio Languages Models
+Phonon builds on the ground-breaking work on Continuous Audio Language Models
 developed by Kyutai. This line of work resulted in [Pocket
 TTS](https://github.com/kyutai-labs/pocket-tts) which Phonon builds heavily on.
 It uses the [xn](https://github.com/LaurentMazare/xn) Rust tensor runtime.
-Gradium's Phonon checkpoints are the primary target. Compatible Pocket TTS
-checkpoints use the same explicit loading interface when they supply their own
-config, tokenizer JSON, weights, and voices.
+Pocket TTS checkpoints load too, when they supply their own config, tokenizer
+JSON, weights, and voices.
 
 ## License
 
 The code is **MIT OR Apache-2.0**, at your option: [MIT](LICENSE-MIT) ·
 [Apache-2.0](LICENSE-APACHE).
 
-Model weights and voices are distributed separately and have their own licenses.
-Check the model license before redistribution.
+Model weights and voices are distributed separately and have their own terms.
+Phonon 31M is under Apache 2.0, and Phonon 40M and Phonon 40M multilingual are
+under CC BY-NC 4.0. Check each model's page on Hugging Face before
+redistribution.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository is dual licensed as above, without additional
-  terms or conditions.
+terms or conditions.
