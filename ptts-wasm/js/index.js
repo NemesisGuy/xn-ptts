@@ -175,6 +175,11 @@ export class PhononTTS {
       tts.features = reply.features;
       tts.device = reply.device;
       tts.languages = reply.languages;
+      if (lang !== 'none' && tts.languages.length && !tts.languages.includes(lang)) {
+        console.warn(
+          `[phonon-tts] text is normalized as ${lang}, but the model was trained for ${tts.languages.join(', ')}`,
+        );
+      }
       tts.deviceReason = reply.deviceReason;
       tts.threads = reply.threads;
       tts.threadsReason = reply.threadsReason;

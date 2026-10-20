@@ -194,7 +194,7 @@ impl Tts {
             }
         };
         // Loading reads hundreds of megabytes and runs no Python.
-        py.detach(move || {
+        let tts = py.detach(move || -> PyResult<Self> {
             let options = ResolveOptions { quant, weights: None };
             let artifacts = Checkpoint::locate(&model, options).py()?;
             let catalog = voice_catalog
@@ -223,7 +223,12 @@ impl Tts {
                 None => None,
             };
             Ok(Self { inner: Arc::new(Mutex::new(synth)), default_voice: voice, catalog })
-        })
+        })?;
+        if let Some(warning) = normalize.language_warning(tts.lock()?.languages()) {
+            let warning = std::ffi::CString::new(warning).expect("no NUL in a warning");
+            PyErr::warn(py, &py.get_type::<pyo3::exceptions::PyUserWarning>(), &warning, 1)?;
+        }
+        Ok(tts)
     }
 
     /// Sample rate of the audio this model produces, in Hz.

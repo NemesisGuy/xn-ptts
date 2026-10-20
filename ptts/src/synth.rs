@@ -1518,6 +1518,9 @@ impl SynthBuilder {
     /// Load the checkpoint, choosing the device and weight format from
     /// [`Self::device`] and [`Self::quant`].
     pub fn build(self) -> Result<Synth> {
+        if let Some(warning) = self.normalize.language_warning(&self.config.languages) {
+            tracing::warn!("{warning}");
+        }
         let device = self.device.resolve_for(self.quant);
         self.quant.check_device(device)?;
         match device {
