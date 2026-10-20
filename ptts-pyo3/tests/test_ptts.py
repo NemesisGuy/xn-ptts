@@ -326,6 +326,15 @@ def test_an_unknown_voice_with_an_unreadable_catalog_still_names_the_voices(tts,
 
 
 @pytest.mark.checkpoint
+def test_a_language_the_model_was_not_trained_for_is_warned_about(tts):
+    other = next((lang for lang in ("en", "fr", "de", "es", "pt") if lang not in tts.languages), None)
+    if not tts.languages or other is None:
+        pytest.skip("the checkpoint lists no languages, or all of them")
+    with pytest.warns(UserWarning, match=f"normalized as {other}"):
+        ptts.TTS(os.environ["PTTS_TEST_MODEL"], lang=other, device="cpu", quant="q8")
+
+
+@pytest.mark.checkpoint
 def test_the_same_seed_gives_the_same_audio(tts):
     import numpy as np
 

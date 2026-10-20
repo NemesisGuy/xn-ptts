@@ -92,6 +92,18 @@ test('device is checked before the worker starts, handed to it, and reported bac
   assert.equal(FakeWorker.last.init.device, undefined);
 });
 
+test('a language the model was not trained for is warned about', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const lang of ['en', 'fr', 'none']) {
+    (await PhononTTS.load({ lang, model: MODEL, workerUrl: 'worker.js' })).dispose();
+  }
+  assert.equal(warn.mock.callCount(), 0);
+  (await PhononTTS.load({ lang: 'de', model: MODEL, workerUrl: 'worker.js' })).dispose();
+  assert.deepEqual(warn.mock.calls.map((c) => c.arguments[0]), [
+    '[phonon-tts] text is normalized as de, but the model was trained for en, fr',
+  ]);
+});
+
 test('threads is checked before the worker starts, handed to it, and reported back', async () => {
   FakeWorker.last = null;
   for (const threads of [0, -1, 2.5, '4', null]) {

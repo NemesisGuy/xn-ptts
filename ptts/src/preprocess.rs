@@ -357,6 +357,19 @@ impl Normalize {
         }
     }
 
+    /// A warning when this policy normalizes text as a language the model was not trained for,
+    /// given the `languages` its config lists. A config that lists none is not checked.
+    pub fn language_warning(self, languages: &[String]) -> Option<String> {
+        let lang = self.lang?.as_str();
+        if languages.is_empty() || languages.iter().any(|l| l == lang) {
+            return None;
+        }
+        Some(format!(
+            "text is normalized as {lang}, but the model was trained for {}",
+            languages.join(", ")
+        ))
+    }
+
     /// Which rewrites this policy applies.
     pub const fn rules(self) -> Rules {
         self.rules
@@ -863,6 +876,19 @@ fn split_slash(word: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_language_the_model_lacks_is_warned_about() {
+        let langs = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let fr = Normalize::for_lang(Lang::Fr);
+        assert_eq!(
+            fr.language_warning(&langs(&["en"])).as_deref(),
+            Some("text is normalized as fr, but the model was trained for en")
+        );
+        assert_eq!(fr.language_warning(&langs(&["en", "fr"])), None);
+        assert_eq!(fr.language_warning(&[]), None);
+        assert_eq!(Normalize::OFF.language_warning(&langs(&["en"])), None);
+    }
 
     #[test]
     fn normalize_text_cases() {
