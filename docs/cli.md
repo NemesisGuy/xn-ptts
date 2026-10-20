@@ -4,7 +4,7 @@ The `ptts` command generates a WAV from a Phonon checkpoint: the default model, 
 
 ## Desktop downloads
 
-The CLI release workflow builds the following CPU archives. Once published, they appear on the matching [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases), with `SHA256SUMS` for verification.
+Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has these archives, with `SHA256SUMS` for verification.
 
 | Platform | Archive target | Requirements |
 |---|---|---|
@@ -16,7 +16,7 @@ The CLI release workflow builds the following CPU archives. Once published, they
 
 Mac downloads target macOS 15, the oldest Mac runner used to check them. Older macOS versions require a source build and their own verification.
 
-x86-64-v3 includes AVX2, FMA, and F16C. Older x86 CPUs need a source build suited to their CPU. These downloads use CPU execution; GPU support requires a source build with the relevant backend feature.
+x86-64-v3 includes AVX2, FMA, and F16C. Older x86 CPUs need a source build suited to their CPU. The Apple silicon download also includes Metal: with f32 weights, `--device auto` runs on the GPU and `--device cpu` keeps it on the CPU. Quantized weights such as `--quant q8` always run on the CPU. The other downloads run on the CPU only. For CUDA or Vulkan, build from source with that backend feature.
 
 Extract the archive. On Linux or Mac, put the extracted `ptts` file in a directory on your `PATH`, for example `~/.local/bin`. On Windows, run `ptts.exe` in PowerShell, or add its folder to `PATH`. Rust and Python are not required for these downloads. Mac may prompt you to allow the downloaded executable in System Settings because it is not notarized.
 
@@ -35,7 +35,7 @@ With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), `cargo bins
 
 ## Homebrew
 
-On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](https://github.com/gradium-ai/homebrew-tap):
+On Mac or Linux, install the prebuilt command from [Gradium's Homebrew tap](https://github.com/gradium-ai/homebrew-tap):
 
 ```sh
 brew install gradium-ai/tap/ptts
@@ -57,7 +57,7 @@ The first run downloads the default model, Phonon 31m, from Hugging Face and cac
 ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. The default model speaks English. For French, German, Spanish or Portuguese, use a Phonon 40m model, [listed in the README](../README.md#model-setup).
+The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. The default model speaks English. For French, German, Spanish or Portuguese, use a Phonon 40m model, [listed in the README](https://github.com/gradium-ai/xn-ptts#model-setup).
 
 You can also use a Hugging Face repo, such as Phonon 40m in French:
 
@@ -65,9 +65,11 @@ You can also use a Hugging Face repo, such as Phonon 40m in French:
 ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 "Bonjour tout le monde" -o out.wav
 ```
 
-To pin all files to one revision, add it after `@`, as in `hf://gradium/phonon-40m-fr@<commit>`. Without one, the repo's current main revision is used. The Phonon 40m models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. Gated and private models require `HF_TOKEN` or a saved Hugging Face login (`hf auth login`). Cached files are reused. Local folders require no download.
+To pin all files to one revision, add it after `@`, as in `hf://gradium/phonon-40m-fr@<commit>`. Without one, the repo's current main revision is used. The Phonon 40m models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. Gated and private models require `HF_TOKEN` or a saved Hugging Face login (`hf auth login`). Cached files are reused. Without a commit after `@`, each run asks the Hub for the current revision, so a gated model needs the token every time; with a commit, cached files load without one. Local folders require no download.
 
-Use `--voice <name>` for a bundled voice or one of a voice catalog, `--voice /path/to/voice.safetensors` for an embedding, or a short audio file for voice cloning when the checkpoint supports it. With no voice argument, the checkpoint's default voice is used. A name the checkpoint does not have is looked up in the voice catalog, by name in any case and with or without accents, or by its voice ID; only that voice is downloaded, on first use. The catalog is [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) unless `--voice-catalog` names another: an `hf://owner/name[@revision]` repo, or a local `voices.jsonl` or folder holding one, with one `{"name", "filename"}` object per line. `ptts --list-voices` lists the catalog, with each voice's language. `ptts --help` lists the remaining options, including `--threads` for CPU tuning. `ptts --version` reports the runtime version.
+Use `--voice <name>` for a bundled voice or one of a voice catalog, or `--voice /path/to/voice.safetensors` for a voice file. `--voice` also takes a short audio file to clone, but only with a checkpoint that has a speaker encoder, and the Phonon models on Hugging Face do not have one. To clone a voice for them, use `scripts/clone-voice.py`, described in the [README](https://github.com/gradium-ai/xn-ptts#voices). With no voice argument, the checkpoint's default voice is used. A name the checkpoint does not have is looked up in the voice catalog, by name in any case and with or without accents, or by its voice ID; only that voice is downloaded, on first use. The catalog is [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) unless `--voice-catalog` names another: an `hf://owner/name[@revision]` repo, or a local `voices.jsonl` or folder holding one, with one `{"name", "filename"}` object per line. `ptts --list-voices` lists the catalog, with each voice's language. `ptts --help` lists the remaining options, including `--threads` for CPU tuning. `ptts --version` reports the runtime version.
+
+To change the speaking rate, set the `duration_delta` condition: `--condition duration_delta=-0.3` speaks faster, `--condition duration_delta=0.3` slower, and 0 is the default. Small values work best; large ones make speech less reliable.
 
 ## Build from source
 

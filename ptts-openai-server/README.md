@@ -4,7 +4,7 @@ A speech server for Phonon compatible with OpenAI's text-to-speech API: `POST /v
 
 ## Docker
 
-The server downloads the default model on first start:
+On first start the server downloads the default model and the catalog voices in its language, and logs nothing more until they are loaded:
 
 ```bash
 docker run -p 8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 ghcr.io/gradium-ai/ptts-openai-server
@@ -30,7 +30,7 @@ export PTTS_LANG=en
 docker compose -f ptts-openai-server/compose.hub.yaml up
 ```
 
-The Hub Compose file requires an image release that includes this writable cache directory; earlier images may create a cache mount owned by root. Without `@COMMIT_SHA` the repo's `main` is used, so the cache retains files but does not freeze the checkpoint version. Set a commit for a fixed checkpoint.
+Without `@COMMIT_SHA` the repo's `main` is used, so the cache retains files but does not freeze the checkpoint version. Set a commit for a fixed checkpoint.
 
 The cache remains after `docker compose down`; `down --volumes` deletes it. Use `PTTS_IMAGE=ghcr.io/gradium-ai/ptts-openai-server:<version>` to select a release in either Compose file. First startup downloads and loads the checkpoint; follow progress with `docker compose -f ptts-openai-server/compose.hub.yaml logs -f`.
 
@@ -55,7 +55,7 @@ cargo run --release -p ptts-openai-server -- --model "$MODEL_DIR" --quant q8 --l
 
 `--model` (`PTTS_MODEL`) names a checkpoint folder (or a `config.json` in one), or a Hugging Face repo as `hf://owner/name` or `hf://owner/name@revision`. Without it, the server loads the default model. The older `PTTS_CONFIG` and `PTTS_REVISION` still work but are deprecated.
 
-It listens on `0.0.0.0:8880` (`--addr` to change it). There is no authentication, and each request can ask for up to 4096 characters of speech. On a machine others can reach, bind to `--addr 127.0.0.1:8880` or put it behind a proxy that checks access. `--lang` is required: it picks how numbers and symbols are spelled out. `--device auto` uses the GPU backend the binary was built with, if any; quantized weights such as `--quant q8` run on the CPU only. A checkpoint whose config lists conditioners, such as `padding_bonus`, takes their values with `--condition padding_bonus=0.5` (repeatable, or `PTTS_CONDITION=padding_bonus=0.5,num_speakers=2` in the environment); those not given take their defaults. `--help` lists the rest.
+It listens on `0.0.0.0:8880` (`--addr` to change it). There is no authentication, and each request can ask for up to 4096 characters of speech. On a machine others can reach, bind to `--addr 127.0.0.1:8880` or put it behind a proxy that checks access. `--lang` is required: it picks how numbers and symbols are spelled out. `--device auto` uses the GPU backend the binary was built with, if any; quantized weights such as `--quant q8` run on the CPU only. A checkpoint whose config lists conditioners, such as `duration_delta`, takes their values with `--condition duration_delta=0.5` (repeatable, or `PTTS_CONDITION=duration_delta=0.5,num_speakers=1` in the environment); those not given take their defaults. `--help` lists the rest.
 
 By default, one speech generation runs at a time. `--max-concurrent-requests N` (or `PTTS_MAX_CONCURRENT_REQUESTS=N`) sets a positive limit. Excess speech requests immediately receive HTTP 429 with OpenAI error code `server_busy`; retry when an active generation finishes. Slots are released after generation and worker cleanup, including after a disconnect or failure. Health, model, and voice endpoints remain available while generation is busy.
 

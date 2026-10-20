@@ -13,3 +13,14 @@ The server listens on `0.0.0.0:8080`, with WebSocket connections at `/speech/tts
 By default, one WebSocket session is accepted at a time. `--max-concurrent-requests N` sets a positive limit. Excess connections receive HTTP 429 before the WebSocket upgrade, with a message asking the client to retry after an active session closes.
 
 A session retains its primed voice and KV cache between messages. Its slot is held for the entire connection, and released after the session and generation workers stop. Close connections when finished so other clients can connect. A session that sends no message for five minutes while no audio is being generated gets an error with code 408 and is closed. A client that stops reading for 30 seconds is disconnected. The limit applies to connections, including those awaiting their first setup message.
+
+## Protocol
+
+Messages are JSON text frames.
+
+1. Send `{"type": "setup", "output_format": "pcm", "voice": "Zoey"}` first. `output_format` is `pcm` (16-bit mono at the model's rate), `pcm_8000` to `pcm_48000`, `ulaw_8000`, `alaw_8000`, `wav` or `opus`. Leave out `voice` for the default voice. The server answers `{"type": "ready", "sample_rate": ..., "frame_size": ..., ...}`, or an `error`.
+2. Send text with `{"type": "text", "text": "..."}`. Text is buffered, up to 4096 characters.
+3. `{"type": "flush", "flush_id": 1}` speaks the buffered text. The server answers with `audio` messages, then `{"type": "flushed", "flush_id": 1}`. The session stays open.
+4. `{"type": "end_of_stream"}` speaks the rest, answers `{"type": "end_of_stream"}` and ends the session.
+
+Audio arrives as `{"type": "audio", "audio": "<base64>", "start_s": ..., "stop_s": ..., "stream_id": ...}`. Errors are `{"type": "error", "message": ..., "code": ...}`, with codes 400, 404, 408, 500 and 501.

@@ -17,11 +17,14 @@ let player = try PhononPlayer()
 try await player.play(tts.stream("Hello! This is running entirely on the phone."))
 ```
 
-It needs iOS 18 or macOS 15 on Apple silicon, Xcode 16, about 430 MB of disk for the models and
-about 95 MB of memory while speaking. The simulator works, but without a Neural Engine it is
-several times slower than a device.
+It needs iOS 18 or macOS 15 on Apple silicon and Xcode 16. Installed models take about twice the
+size of the model folder, because Core ML keeps a compiled copy beside each model, and a folder
+bundled in the app also stays in the app. Speaking takes about 95 MB of memory. The simulator
+works, but without a Neural Engine it is several times slower than a device. The compiled core is
+built for arm64 only: set Excluded Architectures to `x86_64` in your app target, or a build for
+Any Mac, a Mac archive or a Release build for the simulator fails to link.
 
-Keep `tts` and `player` in your app or view state while speech is playing. `play` returns when generation finishes; releasing the player stops any audio still scheduled.
+Keep `tts` and `player` as properties of an object that stays alive, not as local constants in a function. `play` returns when generation finishes; releasing the player stops any audio still scheduled.
 
 ## Released package
 
@@ -41,7 +44,7 @@ Each release tag has a `Package.swift` at the repository root. It downloads that
 
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
-You still need a Core ML model bundle. Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has one for Phonon 31m, the default model, as `phonon-31m-en-coreml.zip`, with the English voices of the voice catalog. Unzip it and use the folder as described below. For another model, such as one of the gated Phonon 40m models, export a bundle yourself with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows; with the released package, you can skip building the framework there. Bundle the folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
+You still need a Core ML model bundle. Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has one for Phonon 31m, the default model, as `phonon-31m-en-coreml.zip`, with the English voices of the voice catalog. Unzip it, rename the folder `phonon-31m-en-coreml` to `Models`, and add it as described below. For another model, such as one of the gated Phonon 40m models, export a bundle yourself with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows; with the released package, you can skip building the framework there. Bundle the folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
 
 Source development uses this folder's `Package.swift` and the local framework built by `ios/build-xcframework.sh`. The root `Package.swift` always fetches a released framework, so on `main` it can lag behind these sources.
 
@@ -71,8 +74,11 @@ given take their defaults.
 ## 2. Add the package and the models
 
 In Xcode, choose *File, Add Package Dependencies, Add Local*, select `ios/PhononTTS`, and add the
-`ptts` library (module `PhononTTS`) to your app target. Then add the `phonon-coreml` folder to the target as a
-folder reference (a blue folder, not a group) named `Models`.
+`ptts` library (module `PhononTTS`) to your app target. Then rename the model folder to `Models`
+and add it to the target as a folder reference. The built app must contain one `Models` folder
+with the `.mlpackage` files inside. In Xcode 16 and later, a synchronized folder also shows as a
+blue folder, but Xcode compiles the models in it and copies its files loose. If Xcode adds the
+folder that way, set its Build Rules to Apply Once to Folder in the File inspector.
 
 Core ML compiles each model beside itself, so the models have to be copied out of the read-only
 app bundle once. `PhononModels.install(bundled:)` does that, into Application Support and

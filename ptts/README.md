@@ -25,7 +25,7 @@ Without `--model` the command uses the default model. `--model /path/to/model` l
 
 The Python package also installs a command named `ptts`, with the same `--model`. When both are installed, `PATH` order selects the command. Use `python -m ptts` with your Python environment's interpreter to invoke Python explicitly.
 
-The short Rust library example remains in `examples/say.rs`.
+`examples/say.rs` is a short library example. From a checkout, run `cargo run --release -p ptts --example say --features hf,hub -- "Hello world"`.
 
 ## Rust API
 
@@ -35,7 +35,7 @@ Add the library to your project:
 cargo add ptts --features hf
 ```
 
-Enable `hf` for the Hugging Face JSON tokenizer. The library loads local files and does not require the `cli` feature.
+Enable `hf` for the Hugging Face JSON tokenizer. Add `hub` to load `hf://` models, including `DEFAULT_MODEL`, with `Checkpoint::locate`. The library does not need the `cli` feature.
 
 ```rust,no_run
 use ptts::checkpoint::{Checkpoint, ResolveOptions};
