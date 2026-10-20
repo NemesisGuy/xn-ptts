@@ -49,7 +49,7 @@ export interface LoadOptions {
   rewrites?: string;
   /**
    * Values for the conditioners the checkpoint's `config.json` lists, by name, e.g.
-   * `{ padding_bonus: 0.5 }`. Those left out take their defaults. A name the checkpoint does not
+   * `{ duration_delta: 0.5 }`. Those left out take their defaults. A name the checkpoint does not
    * have is an error once its config is loaded.
    */
   conditions?: Record<string, string | number>;
@@ -124,7 +124,7 @@ export interface SpeechStats {
   promptMs?: number;
   /**
    * Generation time per frame: each step's time divided by its frames. A step is one frame on
-   * the CPU and up to eight on WebGPU, so there `min` and `max` are averages over a step,
+   * the CPU and up to four on WebGPU, so there `min` and `max` are averages over a step,
    * and the first step of each chunk also runs that chunk's prompt.
    */
   stepMs?: { avg: number; min: number; max: number };
