@@ -146,16 +146,18 @@ fn with_scale(amount: &str, scale: &str, currency: Currency, lang: Lang) -> Opti
 pub(super) fn scaled(words: &[&str], lang: Lang) -> Option<(String, usize)> {
     let [word, next, ..] = words else { return None };
     let (scale, suffix) = split_suffix(next);
-    let scale = match (lang, scale) {
-        (Lang::Pt, "bi") => "bilhões",
-        (Lang::Pt, "mi") => "milhões",
+    // "$2 million", or "2 € millions" once the character pass has joined it to "2€ millions".
+    let (currency, amount) = split_symbol(word, lang)?;
+    let scale = match (lang, scale, amount) {
+        (Lang::Pt, "bi", "1") => "bilhão",
+        (Lang::Pt, "bi", _) => "bilhões",
+        (Lang::Pt, "mi", "1") => "milhão",
+        (Lang::Pt, "mi", _) => "milhões",
         _ => scale,
     };
     if !scale_word(scale, lang) {
         return None;
     }
-    // "$2 million", or "2 € millions" once the character pass has joined it to "2€ millions".
-    let (currency, amount) = split_symbol(word, lang)?;
     let spoken = with_scale(amount, scale, currency, lang)?;
     Some((format!("{spoken}{suffix}"), 2))
 }

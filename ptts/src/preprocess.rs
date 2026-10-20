@@ -1089,6 +1089,8 @@ mod tests {
             ("Saldo: -R$ 12,50.", "Saldo, menos 12 vírgula 50 reais."),
             ("Captamos R$ 3,5 bi no ano.", "Captamos 3 vírgula 5 bilhões de reais no ano."),
             ("O negócio vale R$1,5 mi.", "O negócio vale 1 vírgula 5 milhões de reais."),
+            ("Custou R$ 1 mi.", "Custou 1 milhão de reais."),
+            ("Vale R$ 1 bi.", "Vale 1 bilhão de reais."),
             ("Fica entre R$ 40-60.", "Fica entre R$ 40 a 60."),
         ];
         for (input, expected) in reais {
