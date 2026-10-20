@@ -86,6 +86,9 @@ English voice, and checks that `QUEUE_FLUSH` cuts a long utterance short. Withou
 that every language reports missing data and synthesis fails cleanly.
 
 ```sh
-./gradlew connectedDebugAndroidTest
+./gradlew connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
 adb shell run-as ai.gradium.phonon.tts ls files   # the WAVs it wrote
 ```
+
+Without that property, Gradle uninstalls the app when the tests end, which also deletes the
+imported model and the WAVs.

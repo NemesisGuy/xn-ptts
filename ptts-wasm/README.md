@@ -4,9 +4,9 @@ The browser build of [Phonon](../ptts/), published to npm as [`phonon-tts`](http
 
 ## Layout
 
-- `src/lib.rs`: the raw `wasm-bindgen` surface. It takes bytes that are already fetched and generates a few 80 ms frames per call, because the worker it runs in must yield to its event loop between calls to hear a cancel. One engine, generic over the device, serves the CPU and, with the `webgpu` feature, WebGPU: loading, voices, normalization, chunking and the end-of-speech rule are shared, and only reading a result back differs. A call makes one frame on the CPU and eight on WebGPU, which reads them back in one round trip. With the `threads` feature it also exports `init_thread_pool` and `start_cpu_pool`, which split the work inside a frame across Web Workers. Text is normalized, split into sentence-aligned chunks and tokenized in Rust, with the same rules as `ptts::synth`. Voices can be `emb` embeddings, which are run through the model once when they are added, or the precomputed KV caches of `embeddings_v2/`.
+- `src/lib.rs`: the raw `wasm-bindgen` surface. It takes bytes that are already fetched and generates a few 80 ms frames per call, because the worker it runs in must yield to its event loop between calls to hear a cancel. One engine, generic over the device, serves the CPU and, with the `webgpu` feature, WebGPU: loading, voices, normalization, chunking and the end-of-speech rule are shared, and only reading a result back differs. A call makes one frame on the CPU and up to four on WebGPU, which reads them back in one round trip. With the `threads` feature it also exports `init_thread_pool` and `start_cpu_pool`, which split the work inside a frame across Web Workers. Text is normalized, split into sentence-aligned chunks and tokenized in Rust, with the same rules as `ptts::synth`. Voices can be `emb` embeddings, which are run through the model once when they are added, or the precomputed KV caches of `embeddings_v2/`.
 - `js/`: the package's public API. `index.js` exports `PhononTTS`, which runs the model in a worker (`worker.js`), downloads and caches its files (`fetch.js`, via the Cache API), and turns requests into async iterators. The worker loads the threaded build on a cross-origin isolated page and the single-threaded one elsewhere, and `threads.js` picks how many threads. `index.d.ts` holds the types. `test/` holds node tests for the wrapper's own logic.
-- `scripts/pack.mjs`: assembles the npm package around the two wasm-pack outputs, `pkg/wasm/` and `pkg/wasm-threads/`. It also patches `wasm-bindgen-rayon`'s worker helper, whose bare `'../../..'` import resolves for neither a bundler nor a browser here.
+- `scripts/pack.mjs`: assembles the npm package around the wasm-pack outputs: `pkg/wasm/` and `pkg/wasm-threads/`, plus the `.wasm` of `pkg/wasm-simd/` and `pkg/wasm-threads-simd/`, the builds without Relaxed SIMD, kept as `phonon_tts_simd_bg.wasm`. It also patches `wasm-bindgen-rayon`'s worker helper, whose bare `'../../..'` import resolves for neither a bundler nor a browser here.
 - `scripts/serve.mjs`: serves the demo with the headers that make it cross-origin isolated.
 - `www/index.html`: the demo page, built on the package the way a consumer would use it.
 
@@ -30,7 +30,7 @@ while (true) {
 
   while (true) {
     // Whole 80 ms frames of mono PCM at model.sample_rate(), model.frame_size() samples
-    // each, or undefined at the end of the chunk. One frame on the CPU, up to eight on WebGPU.
+    // each, or undefined at the end of the chunk. One frame on the CPU, up to four on WebGPU.
     const pcm = await model.generation_step();
     if (!pcm) break;
     // ... play or buffer pcm ...
@@ -53,7 +53,7 @@ make serve                               # build, then serve the demo from site/
 
 `make profiling` builds only the single-threaded module, without wasm-opt, keeping names for the browser profiler. `make serve` sends the cross-origin isolation headers, so the demo runs on the threaded build and shows how many threads it got.
 
-The demo loads the package's default model. `make serve MODEL_DIR=/path/to/model` serves a local one instead: `MODEL_DIR` is a model folder holding `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, an optional `config.json`, and voices under `voices/`. `make demo` links it into `site/model/` and writes `site/model.json` describing what is in it, since the page cannot list a directory over HTTP. The page offers the weight formats the folder has, downloads them the first time, then loads them from the browser's cache.
+The demo loads the package's default model. `make serve MODEL_DIR=/path/to/model` serves a local one instead: `MODEL_DIR` is a model folder holding `config.json`, `tokenizer.json`, `model.q8.gguf` or `model.safetensors`, and its voices under `voices/` or `embeddings/` or as `default-voice.safetensors`. `make demo` links it into `site/model/` and writes `site/model.json` describing what is in it, since the page cannot list a directory over HTTP. The page offers the weight formats the folder has, downloads them the first time, then loads them from the browser's cache.
 
 The package version is not in `js/package.json`. `pack.mjs` stamps it from `workspace.package.version` in the top-level `Cargo.toml`, so npm, PyPI and crates.io stay on one version.
 

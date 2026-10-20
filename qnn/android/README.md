@@ -132,6 +132,9 @@ and the Kotlin lifecycle and callback tests without proprietary SDK headers:
 
 ```sh
 ./gradlew :ptts:testDebugUnitTest -PpttsUnitTestsOnly=true
+cargo check --manifest-path ../text-ffi/Cargo.toml --locked
+cmake -S ../runner/tests -B build/qnn-bundle-tests && cmake --build build/qnn-bundle-tests \
+  && ctest --test-dir build/qnn-bundle-tests --output-on-failure
 ```
 
 That flag refuses packaging tasks, so it cannot accidentally produce an AAR without native code.

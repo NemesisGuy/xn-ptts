@@ -66,8 +66,8 @@ setup](#model-setup) to use another model.
 - **Voices ready to use or make your own:** Choose from ready-to-use voices, or
   design or clone your own and bring it to your device with [two
   scripts](#voices).
-- **Control the delivery:** Adjust speaking speed and start playing streamed
-  audio before the full utterance is ready.
+- **Control the delivery:** Set the speaking rate with the `duration_delta`
+  condition, and start playing streamed audio before the full utterance is ready.
 
 ## Performance
 
@@ -149,7 +149,7 @@ ptts --lang en --voice Zoey "Hello from Phonon." -o speech.wav
 2. Design a voice in **Voice Design**, or open one of your custom voices in the **catalog**.
 3. Click **⋮** on the voice, then **Download for Phonon**.
 
-Pass the file you get to `--voice`. It works with every Phonon checkpoint.
+Pass the file you get to `--voice` of the desktop `ptts` command, or to `tts.add_voice` in Python. It works with every Phonon checkpoint.
 
 </td>
 </tr>
@@ -160,6 +160,8 @@ text description in [Gradium Studio](https://studio.gradium.ai/), or clone one
 from a short recording, and download it from the command line. Two scripts download these voices as voice files. They
 need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can
 create in Gradium Studio. The voice files work with every Phonon checkpoint.
+Run the scripts from a clone of this repository, or pass their URL to `uv run`,
+for example `uv run https://raw.githubusercontent.com/gradium-ai/xn-ptts/main/scripts/download-voice.py --list`.
 
 ```sh
 export GRADIUM_API_KEY=...
@@ -176,7 +178,7 @@ uv run scripts/clone-voice.py speaker.wav --lang en -o voice.safetensors
 ptts --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
 ```
 
-To use a voice by name in Python and the servers too, save it in the checkpoint folder's `voices/`: `-o model/voices/NAME.safetensors` adds the voice `NAME`. A cloned voice is also saved in your Gradium account, so `download-voice.py` can fetch it again by the ID `clone-voice.py` prints. Clone a voice only with the speaker's consent.
+A voice file path works with the desktop `ptts` command; the Python command takes voice names only. In Python, register the file with `tts.add_voice("NAME", "voice.safetensors")`. To use it by name in the servers too, save it in a local checkpoint folder's `voices/`: `-o model/voices/NAME.safetensors` adds the voice `NAME`. A cloned voice is also saved in your Gradium account, so `download-voice.py` can fetch it again by the ID `clone-voice.py` prints. Clone a voice only with the speaker's consent.
 
 <img src="docs/readme/divider.svg" alt="" width="100%">
 
@@ -236,7 +238,7 @@ with tts.stream("Speech can play while the rest is being generated.") as audio:
         print(pcm.shape)
 ```
 
-Leaving the `with` block stops generation and releases its workers. To use another model, pass a local folder or a Hugging Face repo as the first argument, for example `ptts.TTS("hf://gradium/phonon-40m-fr", lang="fr")`.
+Leaving the `with` block stops generation and releases its workers. To use another model, pass a local folder or a Hugging Face repo as the first argument, for example `ptts.TTS("hf://gradium/phonon-40m-fr", lang="fr")`. Phonon 40m is gated: see [Model setup](#model-setup).
 
 The wheel also provides a command:
 
@@ -298,8 +300,10 @@ path needs no Rust build.
 
 Download the Core ML bundle of the default model, `phonon-31m-en-coreml.zip`,
 from the [release](https://github.com/gradium-ai/xn-ptts/releases), unzip it,
-and add the folder to your app as a folder reference named `Models`. The [Swift
-guide](ios/PhononTTS/README.md) shows how to export one for another model.
+rename the folder to `Models`, and add it to your app target as a folder
+reference, so the app holds one `Models` folder with the `.mlpackage` files
+inside. The [Swift guide](ios/PhononTTS/README.md#2-add-the-package-and-the-models)
+covers Xcode's synchronized folders and how to export a bundle for another model.
 
 ```swift
 import Foundation
@@ -314,7 +318,7 @@ let player = try PhononPlayer()
 try await player.play(tts.stream("Hello from Phonon."))
 ```
 
-Keep `tts` and `player` in your app's state while audio plays. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. [Swift guide and Stop example →](ios/PhononTTS/README.md)
+In an app, keep `tts` and `player` as properties of an object that stays alive, not as local constants: `play` returns when generation ends, and releasing the player stops the audio. You can also download models on first run. Requires iOS 18+ or macOS 15+ on Apple silicon. [Swift guide and Stop example →](ios/PhononTTS/README.md)
 
 </details>
 
@@ -386,7 +390,7 @@ For a download cache that survives container replacement, use the [Hub Compose f
 <details>
 <summary>Show Rust quickstart</summary>
 
-Add `ptts` with tokenizer support to your Rust project, or use a [path dependency](docs/development.md#rust) to develop from source:
+Add `ptts` with tokenizer and Hugging Face download support to your Rust project, or use a [path dependency](docs/development.md#rust) to develop from source:
 
 ```sh
 cargo add ptts --features hf,hub

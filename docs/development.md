@@ -29,7 +29,7 @@ cargo run --release -p ptts --features cli --bin ptts -- \
   --model "$MODEL_DIR" --lang en --quant q8 "Hello from Phonon." -o speech.wav
 ```
 
-The short `say` library example remains in [`ptts/examples/say.rs`](../ptts/examples/say.rs). The full CLI is now a binary, not an example. See [CLI options](cli.md).
+The short `say` library example is [`ptts/examples/say.rs`](../ptts/examples/say.rs). The full CLI is the `ptts` binary. See [CLI options](cli.md).
 
 ## Python
 
@@ -128,7 +128,7 @@ node --test ptts-wasm/js/test/*.test.mjs
 
 Do not use `--all-features`: CUDA requires its own SDK. The servers require libopus, and the HTTP server also uses LAME; their guides list the system packages. Release workflows set explicit CPU baselines rather than the checkout's `target-cpu=native` flags.
 
-Installed wheel tests run without weights by default. Supply `PTTS_TEST_MODEL` and, for a Hub model, `PTTS_TEST_REVISION` to include the marked checkpoint tests. Keep private model files and credentials out of public artifacts and shared caches.
+Installed wheel tests run without weights by default. Set `PTTS_TEST_MODEL` to a local checkpoint folder or to `hf://OWNER/MODEL@COMMIT_SHA` to include the marked checkpoint tests. Keep private model files and credentials out of public artifacts and shared caches.
 
 ## Releasing the Swift package
 

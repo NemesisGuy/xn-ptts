@@ -28,7 +28,9 @@ export ANDROID_NDK_HOME=/path/to/ndk
 This writes `android/jniLibs/arm64-v8a/libptts_ffi.so` for phones and
 `android/jniLibs/x86_64/libptts_ffi.so` for the emulator on an x86 machine. Copy the `jniLibs`
 folder to your app's `src/main/`. Only these two ABIs are built: there is no 32-bit
-(`armeabi-v7a`) library.
+(`armeabi-v7a`) library. JNA ships more ABIs, so limit your app to these two with
+`ndk { abiFilters += listOf("arm64-v8a", "x86_64") }` in `defaultConfig`; otherwise the app also
+installs on 32-bit phones, where Phonon fails to load.
 
 The arm64 build requires the dotprod and fp16 instructions (ARMv8.2), which nearly every phone
 since 2019 has. The kernels are chosen at compile time, so the library crashes on a phone without
