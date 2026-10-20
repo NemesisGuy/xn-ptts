@@ -86,7 +86,7 @@ Each goal links to its quickstart below.
 | [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle, exported from a Phonon model. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle: the release has one for Phonon 31M, or export your own. [Swift guide](ios/PhononTTS/README.md). |
 | [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
@@ -296,9 +296,10 @@ In Xcode, choose *File, Add Package Dependencies*, enter
 product. Swift Package Manager downloads the matching compiled framework. This
 path needs no Rust build.
 
-Export a Core ML model bundle with `export_coreml`, as the [Swift
-guide](ios/PhononTTS/README.md) shows, and add it to your app as a folder
-reference named `Models`:
+Download the Core ML bundle of the default model, `phonon-31m-en-coreml.zip`,
+from the [release](https://github.com/gradium-ai/xn-ptts/releases), unzip it,
+and add the folder to your app as a folder reference named `Models`. The [Swift
+guide](ios/PhononTTS/README.md) shows how to export one for another model.
 
 ```swift
 import Foundation
@@ -324,7 +325,7 @@ Keep `tts` and `player` in your app's state while audio plays. You can also down
 
 **Snapdragon NPU:** The [QNN Android preview](qnn/android/README.md) provides a Kotlin API and an AAR around the optimized QNN engine. It requires Android 12+, ARM64, working QNN HTP support and a model bundle compiled for the phone's SoC. There is no automatic CPU fallback. Build the AAR from this repository using its build guide. The planned Maven package is `ai.gradium:ptts`; it is not published yet.
 
-Load a supplied compiled model folder on a worker thread and stream audio to your player:
+Download the bundle of the default model, `phonon-31m-en-qnn.zip`, from the [release](https://github.com/gradium-ai/xn-ptts/releases). Load the unzipped folder on a worker thread and stream audio to your player:
 
 ```kotlin
 import ai.gradium.phonon.PhononTTS

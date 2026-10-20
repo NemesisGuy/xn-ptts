@@ -41,7 +41,7 @@ Each release tag has a `Package.swift` at the repository root. It downloads that
 
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
-You still need a Core ML model bundle. Export one from a Phonon model on Hugging Face with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows. With the released package, you can skip building the framework there. Bundle the exported folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
+You still need a Core ML model bundle. Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has one for Phonon 31M, the default model, as `phonon-31m-en-coreml.zip`, with the English voices of the voice catalog. Unzip it and use the folder as described below. For another model, such as one of the gated Phonon 40M models, export a bundle yourself with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows; with the released package, you can skip building the framework there. Bundle the folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
 
 Source development uses this folder's `Package.swift` and the local framework built by `ios/build-xcframework.sh`. The root `Package.swift` always fetches a released framework, so on `main` it can lag behind these sources.
 
@@ -60,6 +60,9 @@ as Core ML. For another model, add `--model`: a Hugging Face repo, such as
 `--model hf://gradium/phonon-40m-fr`, or a local checkpoint folder with `config.json` and the
 weights. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page, then
 set `HF_TOKEN` or run `hf auth login` before exporting.
+
+The bundle gets the checkpoint's own voices. `--voices <folder>` takes the voice files in that
+folder instead, each named after its file.
 
 If the model takes conditions, such as `padding_bonus`, set them here with
 `--condition padding_bonus=0.5` (repeatable): they are fixed in the exported folder, and those not
