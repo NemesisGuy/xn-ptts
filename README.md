@@ -23,7 +23,7 @@ is written in Rust and needs no PyTorch.
 [![Swift package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Swift&color=orange)](#swift)
 [![Android package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Android&color=blue)](#android)
 
-[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
+[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Examples](#examples) · [Guides](#guides)
 
 ## Try it
 
@@ -374,6 +374,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chunks for your own playback. `Checkpoint::locate` also takes a local folder or `hf://OWNER/MODEL@COMMIT_SHA`. Without the `hub` feature the library never downloads, and reads local folders only. [Rust API and small example →](ptts/README.md)
 
 </details>
+
+## Examples
+
+Apps built on Phonon, in the [examples repository](https://github.com/gradium-ai/examples). Use them as a reference, or build on them.
+
+| Example | What it shows |
+|---|---|
+| [`offline-dino-game`](https://github.com/gradium-ai/examples/tree/main/offline-dino-game) | Phonon in the browser: a dino game where Rex roasts you as you play, every line spoken live in the tab. |
+| [`rep-coach`](https://github.com/gradium-ai/examples/tree/main/rep-coach) | Phonon in an iPhone app: a gym rep counter that counts your reps and coaches you out loud, with no network. |
 
 ## Guides
 
