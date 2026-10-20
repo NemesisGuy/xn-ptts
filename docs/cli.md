@@ -51,21 +51,21 @@ After a new formula version is published, run `brew update` and `brew upgrade gr
 ptts --lang en "Hello world" -o out.wav
 ```
 
-The first run downloads the default model, Phonon 31M, from Hugging Face and caches it. To use a local checkpoint instead:
+The first run downloads the default model, phonon-31m, from Hugging Face and caches it. To use a local checkpoint instead:
 
 ```sh
 ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. The default model speaks English. For French, German, Spanish or Portuguese, use a Phonon 40M model, [listed in the README](../README.md#model-setup).
+The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. The default model speaks English. For French, German, Spanish or Portuguese, use a phonon-40m model, [listed in the README](../README.md#model-setup).
 
-You can also use a Hugging Face repo, such as Phonon 40M in French:
+You can also use a Hugging Face repo, such as phonon-40m in French:
 
 ```sh
 ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 "Bonjour tout le monde" -o out.wav
 ```
 
-To pin all files to one revision, add it after `@`, as in `hf://gradium/phonon-40m-fr@<commit>`. Without one, the repo's current main revision is used. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. Gated and private models require `HF_TOKEN` or a saved Hugging Face login (`hf auth login`). Cached files are reused. Local folders require no download.
+To pin all files to one revision, add it after `@`, as in `hf://gradium/phonon-40m-fr@<commit>`. Without one, the repo's current main revision is used. The phonon-40m models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. Gated and private models require `HF_TOKEN` or a saved Hugging Face login (`hf auth login`). Cached files are reused. Local folders require no download.
 
 Use `--voice <name>` for a bundled voice or one of a voice catalog, `--voice /path/to/voice.safetensors` for an embedding, or a short audio file for voice cloning when the checkpoint supports it. With no voice argument, the checkpoint's default voice is used. A name the checkpoint does not have is looked up in the voice catalog, by name in any case and with or without accents, or by its voice ID; only that voice is downloaded, on first use. The catalog is [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) unless `--voice-catalog` names another: an `hf://owner/name[@revision]` repo, or a local `voices.jsonl` or folder holding one, with one `{"name", "filename"}` object per line. `ptts --list-voices` lists the catalog, with each voice's language. `ptts --help` lists the remaining options, including `--threads` for CPU tuning. `ptts --version` reports the runtime version.
 

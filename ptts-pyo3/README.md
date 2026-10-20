@@ -8,7 +8,7 @@ To try it with [uv](https://docs.astral.sh/uv/), run:
 uvx ptts --lang en "Hello world" -o out.wav
 ```
 
-`uvx` handles the isolated Python environment and package dependencies. The first run downloads the default model, Phonon 31M, and caches it. `--model` accepts a local checkpoint directory or a Hugging Face repo as `hf://owner/name`, such as `hf://gradium/phonon-40m-fr` with `--lang fr`.
+`uvx` handles the isolated Python environment and package dependencies. The first run downloads the default model, phonon-31m, and caches it. `--model` accepts a local checkpoint directory or a Hugging Face repo as `hf://owner/name`, such as `hf://gradium/phonon-40m-fr` with `--lang fr`.
 
 To use the Python API in your own environment, install the package:
 
@@ -28,7 +28,7 @@ tts.save("out.wav", "Hello world")
 
 For a source install, use `uv add /path/to/xn-ptts/ptts-pyo3` or `pip install /path/to/xn-ptts/ptts-pyo3`. Source builds need Rust installed; supported CPython wheels do not. See the [development guide](https://github.com/gradium-ai/xn-ptts/blob/main/docs/development.md) for repository build commands.
 
-`model`, the first argument, names a local directory, a `config.json`, or a Hugging Face repo as `"hf://owner/name"` or `"hf://owner/name@revision"`. Left out, it is `ptts.DEFAULT_MODEL`. Local paths download nothing. Gated repos, such as the Phonon 40M models, need their terms accepted on the model's Hugging Face page, then `HF_TOKEN` set or `hf auth login`. Rust examples, Python, and both servers use the [shared checkpoint resolver](https://github.com/gradium-ai/xn-ptts/blob/main/ptts/src/checkpoint.rs). Every checkpoint supplies its own `config.json` and `tokenizer.json`. q8 prefers `model.q8.gguf` and q4k `model.q4k.gguf`; other formats prefer `model.safetensors`. Voices come from `voices/` or `embeddings/`, plus `default-voice.safetensors` as `default`. Hub downloads use the revision after `@` for all files. `config=` and `revision=` still work but are deprecated.
+`model`, the first argument, names a local directory, a `config.json`, or a Hugging Face repo as `"hf://owner/name"` or `"hf://owner/name@revision"`. Left out, it is `ptts.DEFAULT_MODEL`. Local paths download nothing. Gated repos, such as the phonon-40m models, need their terms accepted on the model's Hugging Face page, then `HF_TOKEN` set or `hf auth login`. Rust examples, Python, and both servers use the [shared checkpoint resolver](https://github.com/gradium-ai/xn-ptts/blob/main/ptts/src/checkpoint.rs). Every checkpoint supplies its own `config.json` and `tokenizer.json`. q8 prefers `model.q8.gguf` and q4k `model.q4k.gguf`; other formats prefer `model.safetensors`. Voices come from `voices/` or `embeddings/`, plus `default-voice.safetensors` as `default`. Hub downloads use the revision after `@` for all files. `config=` and `revision=` still work but are deprecated.
 
 `lang` is required: `en`, `fr`, `de`, `es` or `pt` picks how numbers, symbols and abbreviations are spelled out; `none` uses the text as written.
 
@@ -70,4 +70,4 @@ Rust toolchain and takes a few minutes.
 
 ## License
 
-MIT or Apache-2.0, at your option. The model weights are not part of the package and come with their own licenses: Phonon 31M is under Apache 2.0, and Phonon 40M and Phonon 40M multilingual are under CC BY-NC 4.0. See each model's page on Hugging Face.
+MIT or Apache-2.0, at your option. The model weights are not part of the package and come with their own licenses: phonon-31m is under Apache 2.0, and phonon-40m and phonon-40m multilingual are under CC BY-NC 4.0. See each model's page on Hugging Face.
