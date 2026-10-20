@@ -211,11 +211,10 @@ def test_list_voices_needs_no_lang_or_model(catalog, capsys):
     assert lines == ["Kauã\tpt\ta1\t-", "Zoey\t-\t-\t-"]
 
 
-def test_list_voices_needs_a_catalog():
-    from ptts.__main__ import main
-
-    with pytest.raises(SystemExit):
-        main(["--list-voices"])
+def test_the_default_voice_catalog_is_pinned_to_a_commit():
+    repo, revision = ptts.DEFAULT_VOICE_CATALOG.removeprefix("hf://").split("@")
+    assert repo.count("/") == 1
+    assert len(revision) == 40 and all(c in "0123456789abcdef" for c in revision)
 
 
 # --- errors ----------------------------------------------------------------------------------

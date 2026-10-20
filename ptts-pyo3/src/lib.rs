@@ -108,7 +108,7 @@ impl Tts {
     ///
     /// `voice_catalog` is where a voice the checkpoint does not have is looked
     /// up: a Hugging Face repo as `"hf://owner/name[@revision]"`, or a local
-    /// `voices.jsonl` or folder holding one. A voice is matched by name, in any case and with or without accents, or
+    /// `voices.jsonl` or folder holding one. Left out, it is `DEFAULT_VOICE_CATALOG`. A voice is matched by name, in any case and with or without accents, or
     /// by its catalog `voice_id`, and only the voices used are downloaded.
     #[new]
     #[pyo3(signature = (
@@ -197,10 +197,7 @@ impl Tts {
         py.detach(move || {
             let options = ResolveOptions { quant, weights: None };
             let artifacts = Checkpoint::locate(&model, options).py()?;
-            let catalog = voice_catalog
-                .map(|path| VoiceCatalog::new(&path.to_string_lossy()).map(Arc::new))
-                .transpose()
-                .py()?;
+            let catalog = Some(Arc::new(VoiceCatalog::new(&catalog_source(voice_catalog)).py()?));
             let mut builder = artifacts
                 .builder(normalize)
                 .device(device)
@@ -454,16 +451,25 @@ fn known_voice(catalog: Option<&VoiceCatalog>, synth: &mut Synth, name: &str) ->
     Ok(name)
 }
 
+/// `catalog`, or the default catalog when it is `None`.
+fn catalog_source(catalog: Option<std::path::PathBuf>) -> String {
+    match catalog {
+        Some(path) => path.to_string_lossy().into_owned(),
+        None => ptts::voice_catalog::DEFAULT_VOICE_CATALOG.to_string(),
+    }
+}
+
 /// The voices of a catalog, as dicts of `name`, `voice_id`, `language` and `description`.
 /// `catalog` is as for `TTS`'s `voice_catalog`. Only the catalog is downloaded, no voice and
 /// no model.
 #[pyfunction]
+#[pyo3(signature = (catalog = None))]
 fn catalog_voices(
     py: Python<'_>,
-    catalog: std::path::PathBuf,
+    catalog: Option<std::path::PathBuf>,
 ) -> PyResult<Vec<HashMap<&'static str, Option<String>>>> {
     py.detach(move || {
-        let catalog = VoiceCatalog::new(&catalog.to_string_lossy()).py()?;
+        let catalog = VoiceCatalog::new(&catalog_source(catalog)).py()?;
         Ok(catalog
             .voices()
             .py()?
@@ -612,6 +618,7 @@ fn build_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 fn ptts_(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("DEFAULT_MODEL", ptts::checkpoint::DEFAULT_MODEL)?;
+    m.add("DEFAULT_VOICE_CATALOG", ptts::voice_catalog::DEFAULT_VOICE_CATALOG)?;
     m.add_class::<Tts>()?;
     m.add_class::<AudioStream>()?;
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
