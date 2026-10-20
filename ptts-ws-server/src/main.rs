@@ -75,7 +75,7 @@ struct Args {
     #[arg(long, default_value = "default")]
     rewrites: String,
 
-    /// Set one of the checkpoint's conditioners, e.g. `padding_bonus=0.5`; repeatable. Those
+    /// Set one of the checkpoint's conditioners, e.g. `duration_delta=0.5`; repeatable. Those
     /// not set take their defaults.
     #[arg(long = "condition", value_name = "NAME=VALUE")]
     conditions: Vec<String>,

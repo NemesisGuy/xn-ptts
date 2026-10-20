@@ -63,7 +63,7 @@ def _parser() -> argparse.ArgumentParser:
         "--condition",
         action="append",
         metavar="NAME=VALUE",
-        help="set one of the checkpoint's conditioners, e.g. padding_bonus=0.5; repeatable",
+        help="set one of the checkpoint's conditioners, e.g. duration_delta=0.5; repeatable",
     )
     p.add_argument("--threads", type=int, help="CPU threads for tensor ops")
     p.add_argument("--list-voices", action="store_true", help="list the voices of --voice-catalog, then exit")

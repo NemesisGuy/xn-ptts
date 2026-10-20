@@ -87,7 +87,7 @@ struct Args {
     #[arg(long, default_value = "default", env = "PTTS_REWRITES")]
     rewrites: String,
 
-    /// Set one of the checkpoint's conditioners, e.g. `padding_bonus=0.5`; repeatable. Those
+    /// Set one of the checkpoint's conditioners, e.g. `duration_delta=0.5`; repeatable. Those
     /// not set take their defaults. In the environment, a comma-separated list.
     #[arg(
         long = "condition",

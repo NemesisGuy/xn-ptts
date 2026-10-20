@@ -112,7 +112,7 @@ export class PhononTTS {
     // those; the shape is checked here, before the download.
     const isPlain = typeof conditions === 'object' && conditions !== null && !Array.isArray(conditions);
     if (conditions !== undefined && !isPlain) {
-      throw new TypeError('conditions must be an object of name to value, e.g. { padding_bonus: 0.5 }');
+      throw new TypeError('conditions must be an object of name to value, e.g. { duration_delta: 0.5 }');
     }
     const conditionList = Object.entries(conditions ?? {}).map(([name, value]) => {
       if (typeof value !== 'string' && !Number.isFinite(value)) {

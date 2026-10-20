@@ -59,7 +59,7 @@ struct Args {
     #[arg(
         long = "condition",
         value_name = "NAME=VALUE",
-        help = "Set a conditioner, e.g. padding_bonus=0.5; repeatable"
+        help = "Set a conditioner, e.g. duration_delta=0.5; repeatable"
     )]
     conditions: Vec<String>,
 

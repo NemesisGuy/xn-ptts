@@ -633,7 +633,7 @@ impl Model {
     /// dates), `"none"`, or a comma-separated list of rule names.
     ///
     /// `conditions` is optional and sets the config's conditioners, each as `"NAME=VALUE"`,
-    /// e.g. `["padding_bonus=0.5"]`. Those left out take their defaults.
+    /// e.g. `["duration_delta=0.5"]`. Those left out take their defaults.
     ///
     /// `device` is `"cpu"` or `"webgpu"`. WebGPU needs `q8` weights in a GGUF file, and a
     /// build with the `webgpu` feature.

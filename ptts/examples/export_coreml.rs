@@ -41,7 +41,7 @@ struct Args {
     /// A directory of voice `.safetensors` files, instead of the checkpoint's own.
     #[arg(long)]
     voices: Option<PathBuf>,
-    /// Set a conditioner, e.g. padding_bonus=0.5; repeatable. Fixed in the bundle: the app
+    /// Set a conditioner, e.g. duration_delta=0.5; repeatable. Fixed in the bundle: the app
     /// cannot change it.
     #[arg(long = "condition", value_name = "NAME=VALUE")]
     conditions: Vec<String>,

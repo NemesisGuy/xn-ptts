@@ -50,7 +50,7 @@ private struct Pointer<P>: @unchecked Sendable {
 
 /// Text to speech with Phonon, on the Neural Engine.
 ///
-/// Load once and keep it: loading reads ~400 MB of models and, on the first launch after an
+/// Load once and keep it: loading reads the models and, on the first launch after an
 /// install or a model update, compiles them for this device (about 10 s on an iPhone 16 Pro).
 /// Speaking is then much faster than real time, and audio is delivered as it is generated.
 ///
