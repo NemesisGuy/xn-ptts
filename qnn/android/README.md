@@ -80,11 +80,12 @@ or callback failure. Concurrent generation and closing during generation are rej
 
 The existing QNN export path creates `metadata.json`, a tokenizer, BOS data, voices and compiled
 context binaries. These are exported model assets, not raw safetensors or GGUF checkpoints.
-Exporters must declare the exact tested SoC, matching the target passed to `package.py`:
+Exporters must declare the exact tested SoC of each context binary, matching the device
+passed to `package.py`. One bundle can hold a binary per SoC:
 
 ```sh
-# Run from qnn/export after compiling for the target device.
-python bundle.py --soc-model SM8750 --out bundle
+# Run from qnn/export after compiling for each target device into its own PHONON_OUT.
+python bundle.py --out bundle --binary out/s25=SM8750 --binary out/s24=SM8650
 ```
 
 Every `runtime.context_binaries` entry needs an explicit `soc_models` list:

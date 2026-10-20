@@ -10,6 +10,7 @@ binary to out/phonon.bin, and each graph's DLC to out/<graph>.dlc.
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,8 @@ import torch
 from host import CACHE, PREFILL, int32, mimi_zero_states
 from load import load
 
-OUT = Path(__file__).parent / "out"
+# One directory per model and device: PHONON_OUT, by default out/ here.
+OUT = Path(os.environ.get("PHONON_OUT", Path(__file__).parent / "out"))
 GRAPHS = ["prefill", "step"]
 NAME = "phonon"
 

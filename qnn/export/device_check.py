@@ -16,6 +16,7 @@ import argparse
 import inspect
 import json
 import math
+import os
 import re
 from pathlib import Path
 
@@ -29,7 +30,7 @@ from compare_ref import REF, read
 from host import run, voice_cache
 from load import load, voice_embedding, voice_latents
 
-OUT = Path(__file__).parent / "out"
+OUT = Path(os.environ.get("PHONON_OUT", Path(__file__).parent / "out"))
 OUTPUT_NAMES = {
     "prefill": ["kv_new"],
     "step": ["audio", "eos", "next_emb", "kv_new", "latent"],  # then the Mimi states
