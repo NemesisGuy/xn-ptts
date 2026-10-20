@@ -41,8 +41,7 @@ setup](#model-setup) to use another model.
 - **Small enough to ship:** Choose Phonon 31M or Phonon 40M. Each can ship
   inside a mobile app or load in a browser tab.
 - **Five languages:** Speak English, French, German, Spanish, and Portuguese,
-  with more languages planned. Phonon 40M multilingual speaks all five in one
-  model. Phonon 40M also comes as one model per language.
+  with more languages planned.
 - **Fast across devices:** A custom inference stack runs in browsers and on
   phones, laptops, and embedded hardware, with Core ML on Apple devices, QNN on
   supported Snapdragon NPUs, and GPU support. Multiple backends
@@ -67,15 +66,11 @@ byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs 
 | iPhone 16 Pro, Neural Engine | 22x · 9 ms | 20x · 12 ms |
 | Raspberry Pi 5, CPU, 1 core | 2.3x · 68 ms | 2.2x · 88 ms |
 
-- Every size runs faster than real time on a single CPU core, from a MacBook to
-  a Raspberry Pi 5.
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
-- On one MacBook Air core, Phonon 40M runs at 20x real time with a 7 ms TTFB.
-  Kokoro (82M), run through its own PyTorch package on the same core, runs at
-  7.3x with a 776 ms TTFB. Kokoro does not stream: it makes the whole sentence
-  before returning any audio, so its TTFB is the time for the full sentence.
-  Streaming frame by frame is what keeps Phonon's TTFB in milliseconds.
+- On one MacBook Air core, Phonon 40M reaches 20x real time with a 7 ms TTFB. Kokoro (82M), through
+  its own PyTorch package on the same core, reaches 7.3x with a 776 ms TTFB, since it makes the whole
+  sentence before returning any audio.
 
 ## Choose an integration
 
@@ -93,13 +88,11 @@ Each goal links to its quickstart below.
 | [Connect an existing app or self-host](#docker-and-openai-compatible-api) | `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; it downloads the default model on first start, or mounts your own. [Server guide](ptts-openai-server/README.md). |
 | [Embed the runtime in Rust](#rust) | Rust `ptts` | [crates.io](https://crates.io/crates/ptts) | Library API; add the `cli` feature to install the command. [Rust guide](ptts/README.md). |
 
-Phonon is the product and model identity. The Rust, Python, Swift, and planned Android Maven packages are named **`ptts`**; the browser npm package is **`phonon-tts`**. This repository remains `xn-ptts`. Swift apps use `import PhononTTS`.
-
-Desktop downloads and Python wheels do not need a Rust compiler. Older x86 CPUs may need a source build: x86 wheels and desktop downloads target x86-64-v3. See the platform requirements in the [CLI guide](docs/cli.md) and [Python guide](ptts-pyo3/README.md).
+The packages are named **`ptts`**, except the npm package **`phonon-tts`**; Swift apps `import PhononTTS`.
 
 ## Model setup
 
-Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31M, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) (English, Apache 2.0), pinned to one commit. Swift and Android load a model bundle you add to the app.
+Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31M, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en), pinned to one commit. Swift and Android load a model bundle you add to the app.
 
 The Phonon models on Hugging Face:
 
@@ -112,18 +105,6 @@ The Phonon models on Hugging Face:
 Phonon 31M is public. The Phonon 40M models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31M from Hugging Face. To use a Phonon 40M model in a browser, download its files and serve them with your app, under the model's license.
 
 To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos also need `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
-
-A checkpoint folder looks like this:
-
-```text
-model/
-  config.json
-  tokenizer.json
-  model.q8.gguf
-  default-voice.safetensors
-```
-
-Voice files may instead live in `voices/` or `embeddings/`. Use the files and voice names your checkpoint supplies; do not substitute another model's tokenizer or config. The command line, Python and the servers load f32 weights unless given `--quant q8` or `quant="q8"`, which runs faster on the CPU; the browser loads q8 unless given `quant: 'f32'`.
 
 ## Voices
 
@@ -171,8 +152,7 @@ These examples use the default model.
 <details>
 <summary>Show command line quickstart</summary>
 
-With [uv](https://docs.astral.sh/uv/), `uvx ptts` runs the command without
-installing it, as in [Try it](#try-it). On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
+On Mac or Linux, install the prebuilt desktop command from Gradium's Homebrew
 tap:
 
 ```sh
@@ -180,26 +160,13 @@ brew install gradium-ai/tap/ptts
 ```
 
 You can also extract a [desktop archive](docs/cli.md) and put `ptts` on your
-`PATH`. Neither path needs Python or Rust. Generate a WAV:
+`PATH`. Neither path needs Python or Rust. Generate a mono 24 kHz WAV:
 
 ```sh
 ptts --lang en "Hello from Phonon." -o speech.wav
 ```
 
-The output is a mono 24 kHz WAV. Open it in your audio player.
-
-If you prefer Cargo, install the command with `cargo install ptts --locked --features cli`.
-
-To use another model, pass a local folder or a Hugging Face repo, and `--quant
-q8` for faster q8 weights on the CPU. For example, Phonon 40M in French, a gated
-model (see [Model setup](#model-setup)):
-
-```sh
-ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 \
-  "Bonjour, ici Phonon." -o speech.wav
-```
-
-Use `--voice NAME` to choose a voice, from the model or the [voice catalog](#voices); omitting it uses the model's default voice. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
+Use `--model` for another model (see [Model setup](#model-setup)), `--quant q8` for faster q8 weights on the CPU, and `--voice NAME` to choose a voice, from the model or the [voice catalog](#voices); omitting it uses the model's default voice. Run `ptts --help` for the remaining options. [CLI guide →](docs/cli.md)
 
 </details>
 
@@ -354,12 +321,13 @@ Copy `android/jniLibs` into your app's `src/main/`, then add the Kotlin wrapper 
 <details>
 <summary>Show Docker and API quickstart</summary>
 
-Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) and replace `<release-version>` below, without the leading `v`. The Docker commands below use Bash or another POSIX shell. Start the speech server, which downloads the default model on first start:
+Start the speech server, which downloads the default model on first start:
 
 ```sh
-PTTS_IMAGE="ghcr.io/gradium-ai/ptts-openai-server:<release-version>"
-docker run --rm -p 127.0.0.1:8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 "$PTTS_IMAGE"
+docker run --rm -p 127.0.0.1:8880:8880 -e PTTS_LANG=en -e PTTS_QUANT=q8 ghcr.io/gradium-ai/ptts-openai-server:latest
 ```
+
+`latest` follows the newest release; for a repeatable deployment, use a version tag such as `0.4.0`.
 
 In a second terminal:
 
@@ -409,7 +377,7 @@ Build with `--release` and reuse the model. `tts.stream(text)?` yields audio chu
 
 ## Guides
 
-Each integration's guide is linked from its row in [Choose an integration](#choose-an-integration) and from its quickstart. Two more:
+Besides each integration's guide:
 
 - [WebSocket server](ptts-ws-server/README.md): streaming text and audio over one connection.
 - [Development](docs/development.md): build packages, run the local demo, and develop from source.
