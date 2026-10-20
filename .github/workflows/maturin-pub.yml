@@ -36,7 +36,14 @@ on:
       - main
     tags:
       - 'v*'
+    # Docs alone change no wheel. Tag pushes ignore path filters, so a release always builds.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:

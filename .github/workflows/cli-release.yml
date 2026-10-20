@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'ptts/**'
+      - '!ptts/**/*.md'
       - 'ptts-ffi/**'
       - 'ptts-coreml/**'
       - 'ios/**'
@@ -16,12 +17,12 @@ on:
       - 'scripts/package-cli.py'
       - 'scripts/homebrew-cli.py'
       - 'scripts/upload-release.py'
-      - 'docs/cli.md'
       - '.github/workflows/cli-release.yml'
       - '.github/actions/setup-rust/**'
   pull_request:
     paths:
       - 'ptts/**'
+      - '!ptts/**/*.md'
       - 'ptts-ffi/**'
       - 'ptts-coreml/**'
       - 'ios/**'
@@ -32,7 +33,6 @@ on:
       - 'scripts/package-cli.py'
       - 'scripts/homebrew-cli.py'
       - 'scripts/upload-release.py'
-      - 'docs/cli.md'
       - '.github/workflows/cli-release.yml'
       - '.github/actions/setup-rust/**'
   workflow_dispatch:
