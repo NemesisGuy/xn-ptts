@@ -67,8 +67,8 @@ set `HF_TOKEN` or run `hf auth login` before exporting.
 The bundle gets the checkpoint's own voices. `--voices <folder>` takes the voice files in that
 folder instead, each named after its file.
 
-If the model takes conditions, such as `padding_bonus`, set them here with
-`--condition padding_bonus=0.5` (repeatable): they are fixed in the exported folder, and those not
+If the model takes conditions, such as `duration_delta`, set them here with
+`--condition duration_delta=0.3` (repeatable): they are fixed in the exported folder, and those not
 given take their defaults.
 
 ## 2. Add the package and the models

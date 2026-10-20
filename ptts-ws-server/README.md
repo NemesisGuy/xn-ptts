@@ -18,7 +18,7 @@ A session retains its primed voice and KV cache between messages. Its slot is he
 
 Messages are JSON text frames.
 
-1. Send `{"type": "setup", "output_format": "pcm", "voice": "Zoey"}` first. `output_format` is `pcm` (16-bit mono at the model's rate), `pcm_8000` to `pcm_48000`, `ulaw_8000`, `alaw_8000`, `wav` or `opus`. Leave out `voice` for the default voice. The server answers `{"type": "ready", "sample_rate": ..., "frame_size": ..., ...}`, or an `error`.
+1. Send `{"type": "setup", "output_format": "pcm", "voice": "Zoey"}` first. `output_format` is `pcm` (16-bit mono at the model's rate), `pcm_8000`, `pcm_16000`, `pcm_22050`, `pcm_24000`, `pcm_44100`, `pcm_48000`, `ulaw_8000` (or `mulaw_8000`), `alaw_8000`, `wav` or `opus`. Leave out `voice` for the default voice. The server answers `{"type": "ready", "sample_rate": ..., "frame_size": ..., ...}`, or an `error`.
 2. Send text with `{"type": "text", "text": "..."}`. Text is buffered, up to 4096 characters.
 3. `{"type": "flush", "flush_id": 1}` speaks the buffered text. The server answers with `audio` messages, then `{"type": "flushed", "flush_id": 1}`. The session stays open.
 4. `{"type": "end_of_stream"}` speaks the rest, answers `{"type": "end_of_stream"}` and ends the session.

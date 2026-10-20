@@ -63,7 +63,7 @@ Cancellation discards unread stream chunks. Stop any audio already scheduled in 
 | `model` | `DEFAULT_MODEL` | where the checkpoint's files are, see [The model](#the-model) |
 | `lang` | **required** | `'en'`, `'fr'`, `'de'`, `'es'`, `'pt'`, or `'none'`. Numbers, dates and symbols are read out the way a speaker of that language would say them. The spoken forms differ per language, so there is no default. `'none'` passes text through as written. |
 | `rewrites` | `'default'` | which word rewrites run on the normalized text: `'default'` (numbers, currency, dashed-digits, emails, urls, abbreviations, elongations), `'all'` (those and phones, times, dates), `'none'`, or a comma-separated list of rule names. Inert when `lang` is `'none'`. |
-| `conditions` | | values for the conditioners the checkpoint's `config.json` lists, by name, e.g. `{ duration_delta: 0.5 }`. Those left out take their defaults. |
+| `conditions` | | values for the conditioners the checkpoint's `config.json` lists, by name, e.g. `{ duration_delta: 0.3 }`. Those left out take their defaults. |
 | `quant` | `'q8'` | `'q8'` (smaller, faster) or `'f32'` |
 | `voices` | the default voice | voices to fetch during `load`. Others are fetched the first time they are used. |
 | `cache` | `true` | keep downloads in the Cache API |
@@ -152,7 +152,7 @@ Cross-Origin-Embedder-Policy: require-corp
 
 With them, the page can only load cross-origin resources that opt in, through CORS or a `Cross-Origin-Resource-Policy` header. That includes the model files, if they are served from another origin.
 
-The package ships two wasm builds and picks one when it loads: the threaded build on an isolated page, the single-threaded one elsewhere, or if threads fail to start. Both produce the same audio. `tts.threads` says how many threads it got, and `tts.threadsReason` why. `'auto'` uses 3 threads, or fewer on a device with fewer cores: past a few threads, handing out the work costs more than it saves, and a thread that lands on an efficiency core slows the rest down. Pass `threads: 1` to stay on one thread, or a number of your own for devices you know better.
+The package ships two wasm builds, each with and without Relaxed SIMD, and picks one when it loads: the threaded build on an isolated page, the single-threaded one elsewhere, or if threads fail to start. Both produce the same audio. `tts.threads` says how many threads it got, and `tts.threadsReason` why. `'auto'` uses 3 threads, or fewer on a device with fewer cores: past a few threads, handing out the work costs more than it saves, and a thread that lands on an efficiency core slows the rest down. Pass `threads: 1` to stay on one thread, or a number of your own for devices you know better.
 
 This build speaks with ready-made voices only: cloning from an audio sample is not in the browser build. Voices from the catalog [`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) load with `addVoice` from the URL of their file, for example `await tts.addVoice('Zoey', 'https://huggingface.co/gradium/phonon-voices/resolve/main/voices/NbpkqMVS3CJeq2j8.safetensors')`. The catalog's `voices.jsonl` lists each voice's name, language and file. Voice files from the Gradium Studio scripts in the [repository](https://github.com/gradium-ai/xn-ptts#voices) load the same way.
 
