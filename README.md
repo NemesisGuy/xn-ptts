@@ -1,29 +1,45 @@
-# Phonon
-
-**Streaming speech, on your device.**
+<p align="center">
+  <a href="https://gradium.ai/phonon"><img src="docs/readme/hero.webp" alt="Phonon" width="100%"></a>
+</p>
 
 Phonon brings natural text-to-speech to phones, laptops, browsers, and local
 services. It is built for offline assistants, accessibility tools, and
 interactive experiences that need speech without a cloud round trip. The runtime
 is written in Rust and needs no PyTorch.
 
-[![Rust CI](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml)
-[![Python wheels](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml)
-[![Browser package](https://github.com/gradium-ai/xn-ptts/actions/workflows/npm-publish.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/npm-publish.yml)
-[![Native packages](https://github.com/gradium-ai/xn-ptts/actions/workflows/cli-release.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/cli-release.yml)
-[![Docker builds](https://github.com/gradium-ai/xn-ptts/actions/workflows/docker.yml/badge.svg?branch=main)](https://github.com/gradium-ai/xn-ptts/actions/workflows/docker.yml)
+<p align="center">
+  <a href="https://github.com/gradium-ai/xn-ptts/actions/workflows/rust-ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/gradium-ai/xn-ptts/rust-ci.yml?branch=main&label=rust&style=flat-square&labelColor=000" alt="Rust CI"></a>
+  <a href="https://github.com/gradium-ai/xn-ptts/actions/workflows/maturin-pub.yml"><img src="https://img.shields.io/github/actions/workflow/status/gradium-ai/xn-ptts/maturin-pub.yml?branch=main&label=python%20wheels&style=flat-square&labelColor=000" alt="Python wheels"></a>
+  <a href="https://github.com/gradium-ai/xn-ptts/actions/workflows/npm-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/gradium-ai/xn-ptts/npm-publish.yml?branch=main&label=npm&style=flat-square&labelColor=000" alt="Browser package"></a>
+  <a href="https://github.com/gradium-ai/xn-ptts/actions/workflows/cli-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/gradium-ai/xn-ptts/cli-release.yml?branch=main&label=native%20packages&style=flat-square&labelColor=000" alt="Native packages"></a>
+  <a href="https://github.com/gradium-ai/xn-ptts/actions/workflows/docker.yml"><img src="https://img.shields.io/github/actions/workflow/status/gradium-ai/xn-ptts/docker.yml?branch=main&label=docker&style=flat-square&labelColor=000" alt="Docker builds"></a>
+</p>
 
-[![Code license: MIT OR Apache-2.0](https://img.shields.io/badge/code-MIT%20OR%20Apache--2.0-blue)](#license)
-[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/T85yt8kD33)
+<p align="center">
+  <a href="#license"><img src="https://img.shields.io/badge/code-MIT%20OR%20Apache--2.0-F2F2F2?style=flat-square&labelColor=000" alt="Code license: MIT OR Apache-2.0"></a>
+  <a href="https://discord.gg/T85yt8kD33"><img src="https://img.shields.io/badge/discord-join%20the%20community-F2F2F2?logo=discord&logoColor=white&style=flat-square&labelColor=000" alt="Discord"></a>
+</p>
 
-[![Published Rust version](https://img.shields.io/crates/v/ptts?label=crates.io)](https://crates.io/crates/ptts)
-[![Published Python version](https://img.shields.io/pypi/v/ptts?label=PyPI)](https://pypi.org/project/ptts/)
-[![Published npm version](https://img.shields.io/npm/v/phonon-tts?label=npm)](https://www.npmjs.com/package/phonon-tts)
-[![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
-[![Swift package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Swift&color=orange)](#swift)
-[![Android package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Android&color=blue)](#android)
+<p align="center">
+  <a href="https://crates.io/crates/ptts"><img src="https://img.shields.io/crates/v/ptts?label=crates.io&style=flat-square&labelColor=000&color=DAFF53" alt="Published Rust version"></a>
+  <a href="https://pypi.org/project/ptts/"><img src="https://img.shields.io/pypi/v/ptts?label=pypi&style=flat-square&labelColor=000&color=DAFF53" alt="Published Python version"></a>
+  <a href="https://www.npmjs.com/package/phonon-tts"><img src="https://img.shields.io/npm/v/phonon-tts?label=npm&style=flat-square&labelColor=000&color=DAFF53" alt="Published npm version"></a>
+  <a href="https://github.com/gradium-ai/xn-ptts/releases"><img src="https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=native%20downloads&style=flat-square&labelColor=000&color=DAFF53" alt="Native downloads"></a>
+  <a href="#swift"><img src="https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=swift&style=flat-square&labelColor=000&color=DAFF53" alt="Swift package"></a>
+  <a href="#android"><img src="https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=android&style=flat-square&labelColor=000&color=DAFF53" alt="Android package"></a>
+</p>
 
-[Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Examples](#examples) · [Guides](#guides)
+<p align="center">
+  <a href="#try-it">[1]&nbsp;TRY&nbsp;IT</a>&nbsp;&nbsp;&nbsp;
+  <a href="#what-you-get">[2]&nbsp;WHAT&nbsp;YOU&nbsp;GET</a>&nbsp;&nbsp;&nbsp;
+  <a href="#choose-an-integration">[3]&nbsp;INTEGRATIONS</a>&nbsp;&nbsp;&nbsp;
+  <a href="#voices">[4]&nbsp;VOICES</a>&nbsp;&nbsp;&nbsp;
+  <a href="#quickstart">[5]&nbsp;QUICKSTART</a>&nbsp;&nbsp;&nbsp;
+  <a href="#examples">[6]&nbsp;EXAMPLES</a>&nbsp;&nbsp;&nbsp;
+  <a href="#guides">[7]&nbsp;GUIDES</a>
+</p>
+
+<img src="docs/readme/divider.svg" alt="" width="100%">
 
 ## Try it
 
@@ -38,10 +54,10 @@ setup](#model-setup) to use another model.
 
 ## What you get
 
-- **Small enough to ship:** Choose Phonon 31M or Phonon 40M. Each can ship
+- **Small enough to ship:** Choose Phonon 31m or Phonon 40m. Each can ship
   inside a mobile app or load in a browser tab.
 - **Five languages:** Speak English, French, German, Spanish, and Portuguese,
-  with more languages planned.
+  with more languages available on request.
 - **Fast across devices:** A custom inference stack runs in browsers and on
   phones, laptops, and embedded hardware, with Core ML on Apple devices, QNN on
   supported Snapdragon NPUs, and GPU support. Multiple backends
@@ -59,7 +75,7 @@ Two model sizes, one inference stack. Each cell is how many seconds of audio Pho
 second of compute (higher is faster; above 1x is faster than real time) and the time to first
 byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs on the accelerator.
 
-| Device | Phonon 31M | Phonon 40M |
+| Device | Phonon 31m | Phonon 40m |
 |---|---|---|
 | MacBook Air M5, CPU + KleidiAI, 1 core | 26x · 5 ms | 20x · 7 ms |
 | MacBook Air M5, CPU + KleidiAI, 4 cores | 41x · 6 ms | 39x · 8 ms |
@@ -68,7 +84,7 @@ byte (TTFB). CPU rows use the number of cores shown; the Neural Engine row runs 
 
 - TTFB stays under 20 ms on Apple devices, because Phonon streams frame by frame instead of waiting
   for the whole sentence.
-- On one MacBook Air core, Phonon 40M reaches 20x real time with a 7 ms TTFB. Kokoro (82M), through
+- On one MacBook Air core, Phonon 40m reaches 20x real time with a 7 ms TTFB. Kokoro (82M), through
   its own PyTorch package on the same core, reaches 7.3x with a 776 ms TTFB, since it makes the whole
   sentence before returning any audio.
 
@@ -81,7 +97,7 @@ Each goal links to its quickstart below.
 | [Generate a speech file](#command-line) | Desktop `ptts` command | [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) or [Homebrew tap](https://github.com/gradium-ai/homebrew-tap) | Linux x64/ARM64, Mac Apple silicon/Intel, and Windows x64 archives, with checksums. No Python or Rust needed. [CLI guide](docs/cli.md). |
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
-| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle: the release has one for Phonon 31M, or export your own. [Swift guide](ios/PhononTTS/README.md). |
+| [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle: the release has one for Phonon 31m, or export your own. [Swift guide](ios/PhononTTS/README.md). |
 | [Add speech to an Android app](#android) | Android `ptts` (QNN) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
@@ -92,17 +108,17 @@ The packages are named **`ptts`**, except the npm package **`phonon-tts`**; Swif
 
 ## Model setup
 
-Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31M, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en), pinned to one commit. Swift and Android load a model bundle you add to the app.
+Without a model argument, the command line, Python, the browser package, the servers and Rust download the default model from Hugging Face on first use and cache it. The default is Phonon 31m, [`hf://gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en), pinned to one commit. Swift and Android load a model bundle you add to the app.
 
 The Phonon models on Hugging Face:
 
 | Model | Hugging Face repo | Languages | License |
 |---|---|---|---|
-| Phonon 31M | [`gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) | English | Apache 2.0 |
-| Phonon 40M | `gradium/phonon-40m-`[`en`](https://huggingface.co/gradium/phonon-40m-en), [`fr`](https://huggingface.co/gradium/phonon-40m-fr), [`de`](https://huggingface.co/gradium/phonon-40m-de), [`es`](https://huggingface.co/gradium/phonon-40m-es), [`pt`](https://huggingface.co/gradium/phonon-40m-pt) | English, French, German, Spanish, Portuguese: one model each | CC BY-NC 4.0 |
-| Phonon 40M multilingual | [`gradium/phonon-40m-multilingual`](https://huggingface.co/gradium/phonon-40m-multilingual) | the same five, in one model | CC BY-NC 4.0 |
+| Phonon 31m | [`gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en) | English | Apache 2.0 |
+| Phonon 40m | `gradium/phonon-40m-`[`en`](https://huggingface.co/gradium/phonon-40m-en), [`fr`](https://huggingface.co/gradium/phonon-40m-fr), [`de`](https://huggingface.co/gradium/phonon-40m-de), [`es`](https://huggingface.co/gradium/phonon-40m-es), [`pt`](https://huggingface.co/gradium/phonon-40m-pt) | English, French, German, Spanish, Portuguese: one model each | CC BY-NC 4.0 |
+| Phonon 40m multilingual | [`gradium/phonon-40m-multilingual`](https://huggingface.co/gradium/phonon-40m-multilingual) | the same five, in one model | CC BY-NC 4.0 |
 
-Phonon 31M is public. The Phonon 40M models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31M from Hugging Face. To use a Phonon 40M model in a browser, download its files and serve them with your app, under the model's license.
+Phonon 31m is public. The Phonon 40m models are gated. To use one, accept its terms on its Hugging Face page; approval is automatic. Then set `HF_TOKEN` or run `hf auth login`, and the command line, Python, the servers and Rust download it like any other model. The browser package has no token to send, so it loads only Phonon 31m from Hugging Face. To use a Phonon 40m model in a browser, download its files and serve them with your app, under the model's license.
 
 To use another model, pass a Hugging Face repo as `hf://OWNER/MODEL`, adding a commit as `hf://OWNER/MODEL@COMMIT_SHA` for a repeatable version, or a local checkpoint folder. Private repos also need `HF_TOKEN` or a saved HF login. Local folders require no Hub access.
 
@@ -120,9 +136,28 @@ language of your text.
 ptts --lang en --voice Zoey "Hello from Phonon." -o speech.wav
 ```
 
+### Download a voice from Gradium Studio
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/readme/download-voice.gif" alt="A voice card in Gradium Studio: its ⋮ menu opened and Download for Phonon clicked" width="100%">
+</td>
+<td>
+
+1. Sign in to [Gradium Studio](https://studio.gradium.ai/).
+2. Design a voice in **Voice Design**, or open one of your custom voices in the **catalog**.
+3. Click **⋮** on the voice, then **Download for Phonon**.
+
+Pass the file you get to `--voice`. It works with every Phonon checkpoint.
+
+</td>
+</tr>
+</table>
+
 You can also design a voice from a
 text description in [Gradium Studio](https://studio.gradium.ai/), or clone one
-from a short recording. Two scripts download these voices as voice files. They
+from a short recording, and download it from the command line. Two scripts download these voices as voice files. They
 need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can
 create in Gradium Studio. The voice files work with every Phonon checkpoint.
 
@@ -142,6 +177,8 @@ ptts --lang en --voice voice.safetensors "Hello from Phonon." -o speech.wav
 ```
 
 To use a voice by name in Python and the servers too, save it in the checkpoint folder's `voices/`: `-o model/voices/NAME.safetensors` adds the voice `NAME`. A cloned voice is also saved in your Gradium account, so `download-voice.py` can fetch it again by the ID `clone-voice.py` prints. Clone a voice only with the speaker's consent.
+
+<img src="docs/readme/divider.svg" alt="" width="100%">
 
 ## Quickstart
 
@@ -233,7 +270,7 @@ const wav = await tts.synthWav('Hello from Phonon.'); // WAV Blob
 
 `model` picks another one: a public Hugging Face repo as
 `'hf://OWNER/MODEL@COMMIT_SHA'`, or the URLs of files you serve with your app.
-The browser cannot load gated repos, so the Phonon 40M models load only from
+The browser cannot load gated repos, so the Phonon 40m models load only from
 files you serve.
 
 Use the returned `Blob` for a download link or your audio player.
@@ -395,6 +432,8 @@ Besides each integration's guide:
 
 Report bugs or request integrations through [GitHub Issues](https://github.com/gradium-ai/xn-ptts/issues). Include your runtime version, device/OS, model revision, weight format, normalization language, and a small reproduction.
 
+<img src="docs/readme/divider.svg" alt="" width="100%">
+
 ## Acknowledgements
 
 Phonon builds on the ground-breaking work on Continuous Audio Language Models
@@ -410,10 +449,24 @@ The code is **MIT OR Apache-2.0**, at your option: [MIT](LICENSE-MIT) ·
 [Apache-2.0](LICENSE-APACHE).
 
 Model weights and voices are distributed separately and have their own terms.
-Phonon 31M is under Apache 2.0, and Phonon 40M and Phonon 40M multilingual are
+Phonon 31m is under Apache 2.0, and Phonon 40m and Phonon 40m multilingual are
 under CC BY-NC 4.0. Check each model's page on Hugging Face before
 redistribution.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository is dual licensed as above, without additional
 terms or conditions.
+
+<img src="docs/readme/divider.svg" alt="" width="100%">
+
+<p align="center">
+  <a href="https://gradium.ai/phonon"><img src="docs/readme/footer.webp" alt="Phonon" width="100%"></a>
+</p>
+
+<p align="center">
+  <a href="https://gradium.ai/phonon"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/icon-gradium-dark.svg"><img src="docs/readme/icon-gradium-light.svg" alt="" width="20" align="middle"></picture>&nbsp;gradium.ai/phonon</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://huggingface.co/gradium"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/icon-huggingface-dark.svg"><img src="docs/readme/icon-huggingface-light.svg" alt="" width="20" align="middle"></picture>&nbsp;hugging&nbsp;face</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://discord.gg/T85yt8kD33"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/icon-discord-dark.svg"><img src="docs/readme/icon-discord-light.svg" alt="" width="20" align="middle"></picture>&nbsp;discord</a>
+</p>
+
+<p align="center"><sub>MADE BY GRADIUM · OPEN WEIGHTS · ON-DEVICE</sub></p>

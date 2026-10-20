@@ -37,9 +37,9 @@ everywhere but is slower.
 
 ## 2. Get a model
 
-The Phonon models are on Hugging Face: [Phonon 31M](https://huggingface.co/gradium/phonon-31m-en)
-for English, and the Phonon 40M models [listed in the README](../README.md#model-setup), one per
-language plus one multilingual. The Phonon 40M models are gated: accept the terms on the model's
+The Phonon models are on Hugging Face: [Phonon 31m](https://huggingface.co/gradium/phonon-31m-en)
+for English, and the Phonon 40m models [listed in the README](../README.md#model-setup), one per
+language plus one multilingual. The Phonon 40m models are gated: accept the terms on the model's
 Hugging Face page before you download its files.
 
 The library loads a checkpoint folder holding these files from the model's repo:

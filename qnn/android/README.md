@@ -82,9 +82,9 @@ or callback failure. Concurrent generation and closing during generation are rej
 ## Model bundles
 
 Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has a QNN bundle for
-Phonon 31M, the default model, as `phonon-31m-en-qnn.zip`. It holds context binaries for the
+Phonon 31m, the default model, as `phonon-31m-en-qnn.zip`. It holds context binaries for the
 SM8650, SM8750, SM8850 and QCS8275, each checked on that SoC, and the English voices of the
-voice catalog. For another model, such as one of the gated Phonon 40M models, build a bundle
+voice catalog. For another model, such as one of the gated Phonon 40m models, build a bundle
 with the export tools below. They compile on Qualcomm AI Hub, so they need an AI Hub account.
 
 A bundle holds `metadata.json`, a tokenizer, BOS data, voices and compiled context binaries.
