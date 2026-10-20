@@ -53,7 +53,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--voice-catalog",
         help="where --voice is looked up when the checkpoint lacks it: hf://owner/name[@revision], or a"
-        " local voices.jsonl or folder holding one",
+        " local voices.jsonl or folder holding one (default: the default voice catalog)",
     )
     p.add_argument("-q", "--quant", help=f"weight format: {', '.join(available_quants())}")
     p.add_argument("-t", "--temperature", type=float, help="sampling temperature")
@@ -82,8 +82,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.list_voices:
-        if args.voice_catalog is None:
-            parser.error("--list-voices lists a catalog: pass --voice-catalog")
         try:
             voices = catalog_voices(args.voice_catalog)
         except Exception as e:  # noqa: BLE001 -- a CLI reports, it does not re-raise

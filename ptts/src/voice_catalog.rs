@@ -2,9 +2,10 @@
 //!
 //! A catalog is a `voices.jsonl` with one object per line: `name` and `filename`, the voice
 //! file's path relative to the catalog, and optionally `voice_id`, `language` and
-//! `description`. It lives in a local folder or a Hugging Face repo. Frontends given a catalog
-//! fall back to it for a voice their checkpoint does not have, through
-//! [`VoiceCatalog::register`]: only the catalog itself and the one voice file are fetched.
+//! `description`. It lives in a local folder or a Hugging Face repo. Frontends fall back to a
+//! catalog, [`DEFAULT_VOICE_CATALOG`] unless given another, for a voice their checkpoint does not
+//! have, through [`VoiceCatalog::register`]: only the catalog itself and the one voice file are
+//! fetched.
 
 use crate::hub::HubSource;
 use crate::synth::Synth;
@@ -14,6 +15,11 @@ use std::sync::OnceLock;
 
 /// The catalog file in a catalog folder or repo.
 pub const CATALOG_FILE: &str = "voices.jsonl";
+
+/// The catalog frontends use when none is given, pinned to a commit like
+/// [`crate::checkpoint::DEFAULT_MODEL`].
+pub const DEFAULT_VOICE_CATALOG: &str =
+    "hf://gradium/phonon-voices@da6c9ec0d47be8df5c87c730a3aa97187f3229c3";
 
 /// One voice of a catalog.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -235,6 +241,13 @@ mod tests {
             catalog("{\"name\": \"A\", \"filename\": \"a.safetensors\"}\nnot json\n");
         let err = catalog.voices().unwrap_err().to_string();
         assert!(err.contains(":2:"), "{err}");
+    }
+
+    #[test]
+    fn the_default_catalog_is_a_hub_repo_pinned_to_a_commit() {
+        let hub = HubSource::parse(DEFAULT_VOICE_CATALOG).unwrap().unwrap();
+        let revision = hub.revision.as_deref().unwrap();
+        assert!(revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()));
     }
 
     #[test]
