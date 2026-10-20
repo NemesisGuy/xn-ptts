@@ -357,7 +357,7 @@ Copy `android/jniLibs` into your app's `src/main/`, then add the Kotlin wrapper 
 <details>
 <summary>Show Docker and API quickstart</summary>
 
-Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) and replace `<release-version>` below, without the leading `v`. Public GHCR access is being finalized; until then use an image you can access or the [source setup](docs/development.md#docker). The Docker commands below use Bash or another POSIX shell. Start the speech server, which downloads the default model on first start:
+Choose an image version from [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) and replace `<release-version>` below, without the leading `v`. The Docker commands below use Bash or another POSIX shell. Start the speech server, which downloads the default model on first start:
 
 ```sh
 PTTS_IMAGE="ghcr.io/gradium-ai/ptts-openai-server:<release-version>"
