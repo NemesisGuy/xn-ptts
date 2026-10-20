@@ -20,8 +20,8 @@ is written in Rust and needs no PyTorch.
 [![Published Python version](https://img.shields.io/pypi/v/ptts?label=PyPI)](https://pypi.org/project/ptts/)
 [![Published npm version](https://img.shields.io/npm/v/phonon-tts?label=npm)](https://www.npmjs.com/package/phonon-tts)
 [![Native downloads](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=native%20downloads)](https://github.com/gradium-ai/xn-ptts/releases)
-[![Swift package](https://img.shields.io/badge/Swift-download-orange)](#swift)
-[![Android QNN package](https://img.shields.io/badge/Android-QNN%20source%20preview-blue)](#android)
+[![Swift package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Swift&color=orange)](#swift)
+[![Android package](https://img.shields.io/github/v/release/gradium-ai/xn-ptts?label=Android&color=blue)](#android)
 
 [Try it](#try-it) · [What you get](#what-you-get) · [Choose an integration](#choose-an-integration) · [Quickstart](#quickstart) · [Guides](#guides)
 
@@ -44,8 +44,8 @@ setup](#model-setup) to use another model.
   with more languages planned. Phonon 40M multilingual speaks all five in one
   model. Phonon 40M also comes as one model per language.
 - **Fast across devices:** A custom inference stack runs in browsers and on
-  phones, laptops, and embedded hardware, with Core ML on Apple devices, a QNN
-  preview for supported Snapdragon NPUs, and GPU support. Multiple backends
+  phones, laptops, and embedded hardware, with Core ML on Apple devices, QNN on
+  supported Snapdragon NPUs, and GPU support. Multiple backends
   deliver faster inference than Kokoro and llama.cpp-based runtimes on the same
   hardware.
 - **Voices ready to use or make your own:** Choose from ready-to-use voices, or
@@ -87,7 +87,7 @@ Each goal links to its quickstart below.
 | [Add speech to a script or backend](#python) | Python `ptts` | [PyPI](https://pypi.org/project/ptts/) | Wheels for supported platforms; CPython 3.9+. [Python guide](ptts-pyo3/README.md). |
 | [Run speech in a web app](#browser) | `phonon-tts` | [npm](https://www.npmjs.com/package/phonon-tts) | Worker, single-thread and threaded Wasm builds, and TypeScript declarations. [Browser guide](ptts-wasm/js/README.md). |
 | [Add speech to an iPhone or Mac app](#swift) | Swift `ptts` | Swift Package Manager: `https://github.com/gradium-ai/xn-ptts.git`, or [GitHub Releases](https://github.com/gradium-ai/xn-ptts/releases) | The package at each release tag, or `ptts-swift-<version>.zip`, with its matching compiled framework. Needs a Core ML model bundle: the release has one for Phonon 31M, or export your own. [Swift guide](ios/PhononTTS/README.md). |
-| [Add speech to an Android app](#android) | Android `ptts` (QNN preview) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
+| [Add speech to an Android app](#android) | Android `ptts` (QNN) | [QNN Android guide](qnn/android/README.md) | Kotlin API and AAR for supported Snapdragon NPUs. Not published to Maven Central yet. |
 | | Android CPU library | [Build guide](android/README.md#1-build-the-library) | `libptts_ffi.so` and a Kotlin wrapper, built from source with Rust and the Android NDK. |
 | [Give Home Assistant's voice assistant a local voice](ptts-openai-server/README.md#home-assistant) | Home Assistant app | [phonon-home-assistant](https://github.com/gradium-ai/phonon-home-assistant) | App for Home Assistant OS that runs the server image and connects it to your voice assistants. No custom integration. |
 | [Connect an existing app or self-host](#docker-and-openai-compatible-api) | `ptts-openai-server` | `ghcr.io/gradium-ai/ptts-openai-server:<version>` | CPU image for amd64 and arm64; it downloads the default model on first start, or mounts your own. [Server guide](ptts-openai-server/README.md). |
@@ -323,7 +323,7 @@ Keep `tts` and `player` in your app's state while audio plays. You can also down
 <details>
 <summary>Show Android integration options</summary>
 
-**Snapdragon NPU:** The [QNN Android preview](qnn/android/README.md) provides a Kotlin API and an AAR around the optimized QNN engine. It requires Android 12+, ARM64, working QNN HTP support and a model bundle compiled for the phone's SoC. There is no automatic CPU fallback. Build the AAR from this repository using its build guide. The planned Maven package is `ai.gradium:ptts`; it is not published yet.
+**Snapdragon NPU:** The [QNN Android library](qnn/android/README.md) provides a Kotlin API and an AAR around the optimized QNN engine. It requires Android 12+, ARM64, working QNN HTP support and a model bundle compiled for the phone's SoC. There is no automatic CPU fallback. Build the AAR from this repository using its build guide. The planned Maven package is `ai.gradium:ptts`; it is not published yet.
 
 Download the bundle of the default model, `phonon-31m-en-qnn.zip`, from the [release](https://github.com/gradium-ai/xn-ptts/releases). Load the unzipped folder on a worker thread and stream audio to your player:
 
@@ -339,7 +339,7 @@ tts.speak("Hello from Phonon.") { pcm ->
 // Reuse tts. Stop and wait for speech to finish before calling tts.close().
 ```
 
-The preview guide covers native library extraction, model bundles and the runnable Speak/Stop example.
+The QNN guide covers native library extraction, model bundles and the runnable Speak/Stop example.
 
 **CPU:** The existing [Android guide](android/README.md) provides a Kotlin wrapper and C API. From the repository root:
 

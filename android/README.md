@@ -1,6 +1,6 @@
 # Phonon on Android
 
-For supported Snapdragon NPUs, the [QNN AAR preview](../qnn/android/README.md) provides a
+For supported Snapdragon NPUs, the [QNN AAR](../qnn/android/README.md) provides a
 Kotlin API and compiled model support on Android 12+ ARM64. Build it from this repository;
 the Maven package is not published yet. This guide covers the CPU library.
 
