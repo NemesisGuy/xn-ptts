@@ -125,7 +125,18 @@ Voice files may instead live in `voices/` or `embeddings/`. Use the files and vo
 
 ## Voices
 
-Each checkpoint comes with its own voices. You can also design a voice from a
+Each checkpoint comes with a default voice. The voice catalog
+[`gradium/phonon-voices`](https://huggingface.co/gradium/phonon-voices) has
+many more, in every language Phonon speaks. When a checkpoint does not have the
+voice you ask for, the command line and Python look it up there and download
+only that voice. `ptts --list-voices` lists the catalog with each voice's
+language. Pick a voice in the language of your text.
+
+```sh
+ptts --lang en --voice Zoey "Hello from Phonon." -o speech.wav
+```
+
+You can also design a voice from a
 text description in [Gradium Studio](https://studio.gradium.ai/), or clone one
 from a short recording. Two scripts download these voices as voice files. They
 need [uv](https://docs.astral.sh/uv/) and a Gradium API key, which you can

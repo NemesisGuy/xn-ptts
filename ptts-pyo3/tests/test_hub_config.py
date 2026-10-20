@@ -98,6 +98,13 @@ def test_without_a_model_the_default_is_fetched(hub):
     assert f"/{repo}/resolve/{revision}/config.json" in hub.requests
 
 
+def test_without_a_catalog_the_default_is_fetched(hub):
+    repo, revision = ptts.DEFAULT_VOICE_CATALOG.removeprefix("hf://").split("@")
+    with pytest.raises(LookupError, match="voices.jsonl"):
+        ptts.catalog_voices()
+    assert hub.requests == [f"/{repo}/resolve/{revision}/voices.jsonl"]
+
+
 @pytest.mark.parametrize("device", ["cuda", "vulkan", "metal"])
 def test_unavailable_device_is_rejected_before_hub_access(hub, device):
     if device in ptts.available_devices():
