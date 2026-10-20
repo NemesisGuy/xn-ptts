@@ -139,7 +139,8 @@ Swift Package Manager and the [Swift Package Index](https://swiftpackageindex.co
 3. Commit only `Package.swift` and land it on `main`.
 4. Tag that commit `v<version>` and push the tag.
 5. The tag run does not rebuild the framework. It downloads the pinned one from the main run that built the same inputs, checks its checksum, and attaches it to the draft release with the rest.
-6. Publish the release. The framework URL works only from then on, so publish promptly: the Swift Package Index builds new tags soon after they appear. If its build ran before the release was public, start it again from the package's page on the index.
+6. Attach the model bundles to the draft release with `gh release upload v<version>`: a Core ML zip per model, made with `export_coreml`, and a QNN zip per model, made with the tools in `qnn/export` on the feat/phonon-qnn branch.
+7. Publish the release. The framework URL works only from then on, so publish promptly: the Swift Package Index builds new tags soon after they appear. If its build ran before the release was public, start it again from the package's page on the index.
 
 If the tag is pushed before step 2, the tag run fails and says so. The root `Package.swift` is generated from `ios/PhononTTS/Package.swift`: after changing that file, run `python3 scripts/package-swift.py check --write`. CI fails while they disagree.
 

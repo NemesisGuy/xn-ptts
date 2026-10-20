@@ -81,8 +81,13 @@ or callback failure. Concurrent generation and closing during generation are rej
 
 ## Model bundles
 
-Supply a prepared bundle with `metadata.json`, a tokenizer, BOS data, voices and compiled
-context binaries. These are exported model assets, not raw safetensors or GGUF checkpoints.
+Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has a QNN bundle for
+every Phonon model, such as `phonon-31m-en-qnn.zip`. It holds context binaries for the
+SM8650, SM8750, SM8850 and QCS8275, each checked on that SoC, and the voices of the model's
+languages. Use it under the model's license.
+
+A bundle holds `metadata.json`, a tokenizer, BOS data, voices and compiled context binaries.
+These are exported model assets, not raw safetensors or GGUF checkpoints.
 Model export and diagnostic tools remain on the [feat/phonon-qnn branch](https://github.com/gradium-ai/xn-ptts/tree/feat/phonon-qnn/qnn/export).
 They are not needed to build or use the AAR with an existing bundle. Bundle metadata must
 declare the exact tested SoC for each compiled context binary.
@@ -101,23 +106,19 @@ this metadata added before using the Android library. The app loads its packaged
 library, even when an older bundle includes a copy. Downloaded models cannot supply executable
 code to the app.
 
-### Already received a model bundle?
+### Use a bundle
 
-Use a compatible QNN bundle locally; no public HF repo or token is needed. Extract the complete
-folder and copy it into app storage before passing that directory to `PhononTTS.load`. Keep
-`metadata.json`, its referenced context binary, tokenizer, BOS data and voices together.
-A raw checkpoint with `config.json` and safetensors or GGUF weights must be exported and
-compiled first; this API cannot load it directly.
+Extract the complete folder and copy it into app storage before passing that directory to
+`PhononTTS.load`. Keep `metadata.json`, its context binaries, tokenizer, BOS data and voices
+together. A raw checkpoint with `config.json` and safetensors or GGUF weights must be exported
+and compiled first; this API cannot load it directly.
 
-For a previously supplied QNN bundle, confirm that it was prepared for QAIRT 2.50.0 and the
-phone's exact SoC. If its metadata lacks `soc_models`, ask for updated metadata identifying the
-binary's verified target. Adding another SoC to the list does not make a compiled binary
-compatible with that device; it needs compiling and testing for that target. The AAR supplies
-the Rust text library, so a bundle's older copy is not used.
+Bundles are built for QAIRT 2.50.0. Adding another SoC to a bundle's metadata does not make a
+compiled binary compatible with that device; it needs compiling and testing for that target.
+The AAR supplies the Rust text library, so a bundle's copy is not used.
 
 Bundles may live in an app's private storage or be copied from application assets. The API
-currently accepts a local directory. Download and cache helpers can be added when the public
-model layout is settled.
+accepts a local directory.
 
 ## Verify it
 

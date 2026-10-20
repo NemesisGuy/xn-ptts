@@ -41,7 +41,7 @@ Each release tag has a `Package.swift` at the repository root. It downloads that
 
 **From the release archive.** Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) also has `ptts-swift-<version>.zip`, the same package on its own. Extract it, add the folder to Xcode as a local package and select the `ptts` library. Swift Package Manager downloads the matching compiled core automatically.
 
-You still need a Core ML model bundle. Export one from a Phonon model on Hugging Face with `export_coreml`, as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows. With the released package, you can skip building the framework there. Bundle the exported folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
+You still need a Core ML model bundle. Each [GitHub Release](https://github.com/gradium-ai/xn-ptts/releases) has one for every Phonon model, such as `phonon-31m-en-coreml.zip`, with the voices of the model's languages. Unzip it and use the folder as described below, under the model's license. To export one yourself, for example with other voices, use `export_coreml` as [step 1](#1-build-the-two-pieces-that-are-not-in-the-source) shows; with the released package, you can skip building the framework there. Bundle the folder with the app, or host it and download it with `PhononModels.download(from:progress:)`, as described below.
 
 Source development uses this folder's `Package.swift` and the local framework built by `ios/build-xcframework.sh`. The root `Package.swift` always fetches a released framework, so on `main` it can lag behind these sources.
 
