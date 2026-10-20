@@ -37,7 +37,12 @@ everywhere but is slower.
 
 ## 2. Get a model
 
-The library loads a checkpoint folder:
+The Phonon models are on Hugging Face: [Phonon 31M](https://huggingface.co/gradium/phonon-31m-en)
+for English, and the Phonon 40M models [listed in the README](../README.md#model-setup), one per
+language plus one multilingual. The Phonon 40M models are gated: accept the terms on the model's
+Hugging Face page before you download its files.
+
+The library loads a checkpoint folder holding these files from the model's repo:
 
 | File | What it is |
 |---|---|
@@ -48,7 +53,8 @@ The library loads a checkpoint folder:
 | `default-voice.safetensors` | Optional. Listed as the voice `default`, and spoken when no voice is set. |
 
 Download the folder into the app's files directory on first run, rather than shipping it in the
-APK.
+APK. A gated model needs a Hugging Face token to download, so host its files yourself, under the
+model's license.
 
 ## 3. The interface
 

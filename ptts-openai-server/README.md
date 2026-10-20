@@ -20,13 +20,13 @@ docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
 
 The image contains the server and no model weights. It is built for `linux/amd64` and `linux/arm64`. On an x86 CPU without AVX2 it runs a slower build made for such CPUs, and says so when it starts. Every model supplies its own `config.json` and `tokenizer.json`.
 
-To serve another model from HF, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`. Set `HF_TOKEN` for a private repo. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
+To serve another model from HF, set `PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA`, for example `PTTS_MODEL=hf://gradium/phonon-40m-fr` with `PTTS_LANG=fr`. Set `HF_TOKEN` for a gated or private repo. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page first. The image uses `/home/phonon/.cache/huggingface` as its writable `HF_HOME`. The Hub Compose file mounts a named volume there, so downloads survive container replacement.
 
 The Hub Compose file serves the default model, or the one `PTTS_MODEL` names:
 
 ```bash
 export PTTS_LANG=en
-# Optional: export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA, and HF_TOKEN for a private repo.
+# Optional: export PTTS_MODEL=hf://OWNER/MODEL@COMMIT_SHA, and HF_TOKEN for a gated or private repo.
 docker compose -f ptts-openai-server/compose.hub.yaml up
 ```
 
@@ -99,7 +99,7 @@ Aliases match in any case, like voice names. A name that is neither a voice nor 
 
 ```bash
 docker run -p 8880:8880 -v "$MODEL_DIR:/models:ro" \
-  -e PTTS_CONFIG=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
+  -e PTTS_MODEL=/models -e PTTS_LANG=en -e PTTS_QUANT=q8 \
   -e PTTS_OPENAI_VOICES=default -e PTTS_VOICE_ALIAS=nova=VOICE \
   -e PTTS_IGNORE_SPEED=true \
   ghcr.io/gradium-ai/ptts-openai-server

@@ -1,6 +1,6 @@
 # Phonon command line
 
-The `ptts` command generates a WAV from an explicitly selected Phonon checkpoint. Models and voices have their own licenses and are downloaded separately.
+The `ptts` command generates a WAV from a Phonon checkpoint: the default model, or the one `--model` names. Models and voices are not part of the command and have their own licenses.
 
 ## Desktop downloads
 
@@ -41,7 +41,7 @@ On Mac or Linux, install the prebuilt CPU command from [Gradium's Homebrew tap](
 brew install gradium-ai/tap/ptts
 ```
 
-Homebrew adds the tap automatically. The formula currently installs the `0.4.0-rc.3` runtime preview and pins each release archive by SHA-256. It does not include a model: `ptts` downloads the default model on first use, or loads the one `--model` names.
+Homebrew adds the tap automatically. The formula pins each release archive by SHA-256. It does not include a model: `ptts` downloads the default model on first use, or loads the one `--model` names.
 
 After a new formula version is published, run `brew update` and `brew upgrade gradium-ai/tap/ptts`. The platform and CPU requirements above still apply.
 
@@ -51,21 +51,21 @@ After a new formula version is published, run `brew update` and `brew upgrade gr
 ptts --lang en "Hello world" -o out.wav
 ```
 
-The first run downloads the default model from Hugging Face and caches it. To use a local checkpoint instead:
+The first run downloads the default model, Phonon 31M, from Hugging Face and caches it. To use a local checkpoint instead:
 
 ```sh
 ptts --model /path/to/model --lang en --quant q8 "Hello world" -o out.wav
 ```
 
-The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports.
+The folder must contain `config.json`, `tokenizer.json`, weights, and any required voice assets. Use q8 for a q8 GGUF checkpoint, or omit `--quant` for f32 weights. `--lang` selects how the runtime reads numbers and symbols: `en`, `fr`, `de`, `es`, `pt`, or `none` to keep text unchanged. Choose it for the language of your input; the checkpoint determines which spoken languages it supports. The default model speaks English. For French, German, Spanish or Portuguese, use a Phonon 40M model, [listed in the README](../README.md#model-setup).
 
-You can also use a Hugging Face repo:
+You can also use a Hugging Face repo, such as Phonon 40M in French:
 
 ```sh
-ptts --model hf://<owner>/<model>@<commit> --lang en --quant q8 "Hello world" -o out.wav
+ptts --model hf://gradium/phonon-40m-fr --lang fr --quant q8 "Bonjour tout le monde" -o out.wav
 ```
 
-All files use the revision after `@`. Without one, the repo's current main revision is used. Private models require `HF_TOKEN` or a saved Hugging Face login. Cached files are reused. Local folders require no download.
+To pin all files to one revision, add it after `@`, as in `hf://gradium/phonon-40m-fr@<commit>`. Without one, the repo's current main revision is used. The Phonon 40M models are gated: accept the terms on the model's Hugging Face page first, and approval is automatic. Gated and private models require `HF_TOKEN` or a saved Hugging Face login (`hf auth login`). Cached files are reused. Local folders require no download.
 
 Use `--voice <name>` for a bundled voice or one of a voice catalog, `--voice /path/to/voice.safetensors` for an embedding, or a short audio file for voice cloning when the checkpoint supports it. With no voice argument, the checkpoint's default voice is used. `--voice-catalog` names a voice catalog: an `hf://owner/name[@revision]` repo, or a local `voices.jsonl` or folder holding one, with one `{"name", "filename"}` object per line. A name the checkpoint does not have is then looked up there, by name in any case and with or without accents, or by its voice ID; only that voice is downloaded, on first use. `ptts --list-voices --voice-catalog <catalog>` lists the catalog. `ptts --help` lists the remaining options, including `--threads` for CPU tuning. `ptts --version` reports the runtime version.
 

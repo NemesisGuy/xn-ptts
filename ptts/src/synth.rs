@@ -19,7 +19,7 @@
 //!     Lang::En,
 //! )
 //! .tokenizer_file("model/tokenizer.json")
-//!     .add_voice("alba", "model/voices/alba.safetensors")
+//!     .add_voice("default", "model/default-voice.safetensors")
 //!     .build()?;
 //! let pcm = tts.say("Hello world")?;
 //! ptts::wav::write_wav_file("out.wav", &pcm, tts.sample_rate())?;
@@ -1837,7 +1837,7 @@ pub trait SynthApi: sealed::Sealed + Send + Sync {
     /// ```no_run
     /// # fn main() -> ptts::Result<()> {
     /// # let tts: ptts::synth::Synth = todo!();
-    /// let session = tts.session(&ptts::synth::SpeechOptions::default().voice("alba"), 1024)?;
+    /// let session = tts.session(&ptts::synth::SpeechOptions::default().voice("default"), 1024)?;
     /// for line in ["First.", "Second.", "Third."] {
     ///     let pcm = session.say(line)?;
     /// }
