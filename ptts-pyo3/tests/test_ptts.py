@@ -171,6 +171,25 @@ def test_build_info_reports_what_a_bug_report_needs():
     assert info["version"] == ptts.__version__
 
 
+def test_normalize_reads_text_as_tts_does():
+    assert ptts.normalize("It costs $5.", lang="en") == "It costs 5 dollars."
+    assert ptts.normalize("Ça coûte 250 €.", lang="fr") == "Ça coûte 250 euros."
+    assert ptts.normalize("Call 3:45PM.", lang="en", rewrites="all") == "Call 3-45 PM."
+    assert ptts.normalize("It costs $5.", lang="en", rewrites="none") == "It costs $5."
+    assert ptts.normalize("It costs $5.", lang="none") == "It costs $5."
+    assert ptts.normalize("It costs $5.", lang=None) == "It costs $5."
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "needle"), [({"lang": "xx"}, "xx"), ({"lang": "en", "rewrites": "colours"}, "colours")]
+)
+def test_normalize_rejects_what_tts_rejects(kwargs, needle):
+    with pytest.raises(ValueError, match=needle):
+        ptts.normalize("hello", **kwargs)
+    with pytest.raises(TypeError):
+        ptts.normalize("hello")
+
+
 def test_thread_count_round_trips():
     before = ptts.get_num_threads()
     assert before >= 1

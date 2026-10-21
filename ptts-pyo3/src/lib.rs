@@ -151,18 +151,7 @@ impl Tts {
             .into_iter()
             .map(|(name, value)| Ok((name, value.str()?.to_string())))
             .collect::<PyResult<Vec<_>>>()?;
-        // `None` opts out as well as `"none"`: `lang` has to be passed, but a
-        // caller forwarding a config value should not have to special-case the
-        // absent one.
-        let normalize = match lang {
-            None => Normalize::OFF,
-            Some(lang) => lang.parse::<Normalize>().py()?,
-        };
-        let rules = match rewrites {
-            None => Rules::DEFAULT,
-            Some(rewrites) => rewrites.parse::<Rules>().py()?,
-        };
-        let normalize = normalize.with_rules(rules);
+        let normalize = normalization(lang, rewrites)?;
         let device = match device {
             None => DeviceKind::Auto,
             Some(name) => name.parse::<DeviceKind>().py()?,
@@ -569,6 +558,32 @@ impl AudioStream {
     }
 }
 
+fn normalization(lang: Option<&str>, rewrites: Option<&str>) -> PyResult<Normalize> {
+    // `None` opts out as well as `"none"`: `lang` has to be passed, but a
+    // caller forwarding a config value should not have to special-case the
+    // absent one.
+    let normalize = match lang {
+        None => Normalize::OFF,
+        Some(lang) => lang.parse::<Normalize>().py()?,
+    };
+    let rules = match rewrites {
+        None => Rules::DEFAULT,
+        Some(rewrites) => rewrites.parse::<Rules>().py()?,
+    };
+    Ok(normalize.with_rules(rules))
+}
+
+/// `normalize(text, *, lang, rewrites=None)`
+///
+/// `text` normalized as `TTS` with the same `lang` and `rewrites` normalizes it
+/// before tokenizing, without loading a model. Accented letters a checkpoint's
+/// tokenizer lacks are folded afterwards, by `TTS`, and are kept here.
+#[pyfunction]
+#[pyo3(signature = (text, *, lang, rewrites = None))]
+fn normalize(text: &str, lang: Option<&str>, rewrites: Option<&str>) -> PyResult<String> {
+    Ok(normalization(lang, rewrites)?.apply(text).into_owned())
+}
+
 /// Number of CPU threads used for tensor ops.
 #[pyfunction]
 fn get_num_threads() -> usize {
@@ -632,6 +647,7 @@ fn ptts_(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(available_quants, m)?)?;
     m.add_function(wrap_pyfunction!(build_info, m)?)?;
     m.add_function(wrap_pyfunction!(catalog_voices, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize, m)?)?;
     Ok(())
 }
 

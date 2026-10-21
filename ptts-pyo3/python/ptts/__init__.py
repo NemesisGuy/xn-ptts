@@ -20,6 +20,7 @@ from ._ptts import (
     build_info,
     catalog_voices,
     get_num_threads,
+    normalize,
     set_num_threads,
 )
 
@@ -34,5 +35,6 @@ __all__ = [
     "build_info",
     "catalog_voices",
     "get_num_threads",
+    "normalize",
     "set_num_threads",
 ]
