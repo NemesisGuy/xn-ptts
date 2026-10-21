@@ -228,3 +228,11 @@ def catalog_voices(catalog: str | PathLike[str] | None = None) -> list[dict[str,
     `catalog` is as for `TTS`'s `voice_catalog`, `DEFAULT_VOICE_CATALOG` when left out. Only the catalog is downloaded, no voice and
     no model.
     """
+
+def normalize(text: str, *, lang: str | None, rewrites: str | None = None) -> str:
+    """`text` normalized as `TTS` with the same `lang` and `rewrites` normalizes it before
+    tokenizing, without loading a model.
+
+    Accented letters a checkpoint's tokenizer lacks are folded afterwards, by `TTS`, and are kept
+    here.
+    """
