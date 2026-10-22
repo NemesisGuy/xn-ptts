@@ -1,9 +1,22 @@
 .PHONY: build profiling demo serve test clean check-wasm-opt check-model-dir check-threads-toolchain threads-toolchain
 
 WASM_PACK_ARGS = --target web --no-pack --out-dir pkg/wasm --out-name phonon_tts
-# Both builds can run on the GPU: the package uses WebGPU when the browser has it, and the
-# CPU, on one thread or several, when it does not.
-FEATURES = webgpu
+# The CPU, on one thread or several. Not WebGPU, even though the package can use it and the
+# browser build still compiles with it: on the 31m checkpoint the WebGPU path in xn's browser
+# backend computes something different from the CPU. The first frame's end-of-speech logit
+# already differs (-3.54 against -11.79, same seed and text), so the generation diverges
+# from the first frame; from the second chunk on the output is NaN, the end-of-speech rule
+# never fires, and the generation runs to its full frame budget -- twice as long as it should
+# be, and mostly noise.
+#
+# The native runtimes are unaffected: they have no WebGPU backend at all, so this is the
+# browser's path only. Until it is fixed the published package is CPU-only. `make
+# build-webgpu` builds the GPU one, for anyone testing it.
+FEATURES =
+
+# The WebGPU build, for testing the GPU path. Not published: `make build` is what the npm
+# package is assembled from.
+WEBGPU_FEATURES = webgpu
 
 # The threaded build, in pkg/wasm-threads/. Wasm threads share memory, which needs std itself
 # rebuilt with atomics, so this one uses a pinned nightly with rust-src. Shared memory also
@@ -51,6 +64,13 @@ profiling:
 	rm -rf pkg
 	wasm-pack build $(WASM_PACK_ARGS) --profiling -- --features $(FEATURES)
 	node scripts/pack.mjs pkg
+
+# The WebGPU build, for testing the GPU path. Not published: `make build` is what the npm
+# package is assembled from. See the note on FEATURES for why the published one is CPU-only.
+build-webgpu: check-wasm-opt
+	rm -rf pkg-webgpu
+	wasm-pack build --target web --no-pack --out-dir pkg-webgpu/wasm --out-name phonon_tts --release \
+		-- --features $(WEBGPU_FEATURES)
 
 # wasm-pack runs the first wasm-opt on PATH, and downloads binaryen 117 when there is none.
 # Releases up to 123 abort on this module ("UNREACHABLE executed" in their interpreter), so
